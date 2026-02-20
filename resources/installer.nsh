@@ -2,6 +2,9 @@
 ; Registers the native messaging host in the Windows Registry during install
 ; and removes it during uninstall.
 
+; Enable high-DPI awareness so the installer renders crisply on modern displays
+ManifestDPIAware true
+
 !macro customInstall
   ; Write Native Messaging Host manifest location to the registry for Chrome and Edge
   WriteRegStr HKCU "Software\Google\Chrome\NativeMessagingHosts\com.idm.clone" "" "$INSTDIR\resources\native-host\com.idm.clone.json"

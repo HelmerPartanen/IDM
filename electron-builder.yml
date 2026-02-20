@@ -17,6 +17,8 @@ nsis:
   installerIcon: resources/favicon.ico
   uninstallerIcon: resources/favicon.ico
   installerHeaderIcon: resources/favicon.ico
+  installerHeader: resources/installerHeader.png
+  installerSidebar: resources/installerSidebar.png
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: Download Manager
