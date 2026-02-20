@@ -181,7 +181,7 @@ export function ScheduleDialog() {
               Cancel
             </button>
             <button type="submit" disabled={isSubmitting}
-              className="px-5 py-2 bg-accent hover:bg-accent-hover text-white text-[13px] font-semibold
+              className="px-5 py-2 bg-accent hover:bg-accent-hover text-black text-[13px] font-semibold
                 rounded-xl transition-apple shadow-glass-sm active:scale-[0.97]
                 disabled:opacity-50 flex items-center gap-2">
               {isSubmitting && <Loader2 size={14} className="animate-spin" />}
