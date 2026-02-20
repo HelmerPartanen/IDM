@@ -2930,9 +2930,8 @@ electron.app.on("will-quit", () => {
   scheduler?.destroy();
   destroyTray();
   closeDatabase();
-  const { httpsAgent: httpsAgent2, httpAgent: httpAgent2 } = require("./download-engine/engine");
-  httpsAgent2?.destroy();
-  httpAgent2?.destroy();
+  httpsAgent?.destroy();
+  httpAgent?.destroy();
 });
 const gotLock = electron.app.requestSingleInstanceLock();
 if (!gotLock) {

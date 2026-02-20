@@ -5,7 +5,7 @@ import log from 'electron-log';
 import fs from 'fs';
 
 import { initDatabase, closeDatabase } from './db/database';
-import { DownloadEngine } from './download-engine/engine';
+import { DownloadEngine, httpsAgent, httpAgent } from './download-engine/engine';
 import { ProgressTracker } from './download-engine/progress-tracker';
 import { QueueManager } from './download-engine/queue-manager';
 import { Scheduler } from './download-engine/scheduler';
@@ -244,7 +244,6 @@ app.on('will-quit', () => {
   closeDatabase();
 
   // Destroy persistent HTTP agents
-  const { httpsAgent, httpAgent } = require('./download-engine/engine');
   httpsAgent?.destroy();
   httpAgent?.destroy();
 });
