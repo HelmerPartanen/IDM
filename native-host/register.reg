@@ -1,0 +1,10 @@
+Windows Registry Editor Version 5.00
+
+; IDM Clone Native Messaging Host Registration
+; Run this file to register the native messaging host for Chrome.
+;
+; IMPORTANT: Update the path below to match your installation location.
+; The path must point to the com.idm.clone.json manifest file.
+
+[HKEY_CURRENT_USER\Software\Google\Chrome\NativeMessagingHosts\com.idm.clone]
+@="C:\\Program Files\\IDM Clone\\native-host\\com.idm.clone.json"
