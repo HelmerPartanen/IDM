@@ -39,12 +39,12 @@ export function Toolbar() {
   };
 
   return (
-    <div className="h-12 pl-4 pr-[140px] flex items-center gap-2">
+    <div className="h-[41px] pl-4 pr-[140px] flex items-center gap-2 border-b border-surface-3">
       {/* Add button — primary CTA */}
       <button
         onClick={() => setShowAddDialog(true)}
         className="flex items-center gap-1.5 bg-accent hover:bg-accent-hover active:scale-[0.97]
-          text-black pl-2.5 pr-3.5 py-[6px] rounded-lg text-[13px] font-semibold
+          text-black pl-2.5 pr-3.5 py-[5px] rounded-lg text-[13px] font-semibold
           transition-apple shadow-glass-sm"
       >
         <Plus size={15} strokeWidth={2.5} />
@@ -52,7 +52,7 @@ export function Toolbar() {
       </button>
 
       {/* Divider */}
-      <div className="w-px h-5 bg-surface-glass-border mx-1" />
+      <div className="w-px h-5 bg-surface-4 mx-1" />
 
       {/* Action group */}
       <ToolbarButton
@@ -94,10 +94,10 @@ export function Toolbar() {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search…"
-          className="bg-surface-glass border border-surface-glass-border rounded-lg
+          className="bg-surface-2 border border-surface-glass-border rounded-lg
             pl-8 pr-7 py-[5px] text-[13px] text-label-primary placeholder-label-quaternary
-            w-44 focus:w-56 focus:border-accent/40 focus:bg-surface-glass-hover
-            transition-all duration-300 ease-apple outline-none"
+            w-44 focus:w-56 focus:border-accent/40 focus:bg-surface-2
+            transition-all duration-300 ease-apple outline-none focus:outline-none"
         />
         {searchQuery && (
           <button
@@ -129,6 +129,8 @@ export function Toolbar() {
       >
         <Minus size={14} strokeWidth={2} />
       </button>
+      {/* Divider */}
+      <div className="w-px h-5 bg-surface-4 mx-1" />
     </div>
   );
 }

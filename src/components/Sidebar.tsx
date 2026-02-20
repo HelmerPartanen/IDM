@@ -24,7 +24,7 @@ export function Sidebar() {
   const counts = getCounts();
 
   return (
-    <aside className="w-[230px] bg-surface-1/80 backdrop-blur-glass border-r border-surface-glass-border flex flex-col h-full overflow-hidden">
+    <aside className="w-[230px] bg-surface-1 border-r border-surface-3 flex flex-col h-full overflow-hidden">
       {/* Brand */}
       <div className="px-5 pt-6 pb-4 drag-region">
         <div className="no-drag flex items-center gap-2.5">
@@ -64,9 +64,9 @@ export function Sidebar() {
       </div>
 
       {/* Footer */}
-      <div className="px-5 py-4 border-t border-surface-glass-border/30 bg-surface-2/40">
+      <div className="px-5 py-4 border-t border-surface-3 bg-surface-1">
         <p className="text-[11px] text-label-quaternary tracking-wide font-medium flex items-center justify-between">
-          <span>v1.5.0 Professional</span>
+          <span>v1.0.0</span>
           <span className="w-2 h-2 rounded-full bg-semantic-success shadow-pulse animate-pulse-glow" />
         </p>
       </div>
