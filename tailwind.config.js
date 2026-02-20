@@ -19,15 +19,15 @@ module.exports = {
           'glass-border-hover': 'rgba(255,255,255,0.14)',
         },
         label: {
-          primary: '#f5f5f7',
-          secondary: '#a1a1a6',
-          tertiary: '#6e6e73',
-          quaternary: '#48484a',
+          primary: '#ffffff',
+          secondary: '#c5c5ca',
+          tertiary: '#a0a0a5',
+          quaternary: '#7c7c80',
         },
         accent: {
-          DEFAULT: '#0A84FF',
-          hover: '#409CFF',
-          subtle: 'rgba(10,132,255,0.12)',
+          DEFAULT: '#ffffff',
+          hover: '#DDDDDD',
+          subtle: 'rgba(42, 149, 255, 0.49)',
           glow: 'rgba(10,132,255,0.25)',
         },
         semantic: {

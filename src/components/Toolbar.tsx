@@ -44,7 +44,7 @@ export function Toolbar() {
       <button
         onClick={() => setShowAddDialog(true)}
         className="flex items-center gap-1.5 bg-accent hover:bg-accent-hover active:scale-[0.97]
-          text-white pl-2.5 pr-3.5 py-[6px] rounded-lg text-[13px] font-semibold
+          text-black pl-2.5 pr-3.5 py-[6px] rounded-lg text-[13px] font-semibold
           transition-apple shadow-glass-sm"
       >
         <Plus size={15} strokeWidth={2.5} />

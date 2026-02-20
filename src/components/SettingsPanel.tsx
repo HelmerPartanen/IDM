@@ -187,7 +187,7 @@ export function SettingsPanel() {
             <button
               onClick={handleSave}
               disabled={saving}
-              className="px-5 py-2 bg-accent hover:bg-accent-hover text-white text-[13px] font-semibold
+              className="px-5 py-2 bg-accent hover:bg-accent-hover text-black text-[13px] font-semibold
                 rounded-xl transition-apple shadow-glass-sm active:scale-[0.97]
                 disabled:opacity-50 flex items-center gap-2"
             >
@@ -221,7 +221,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
       onClick={() => onChange(!checked)}
       className={`
         relative inline-flex h-[22px] w-[40px] items-center rounded-full transition-all duration-300 ease-apple flex-shrink-0
-        ${checked ? 'bg-accent' : 'bg-surface-5'}
+        ${checked ? 'bg-accent-subtle' : 'bg-surface-5'}
       `}
     >
       <span
