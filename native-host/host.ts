@@ -130,7 +130,9 @@ function launchElectronApp(): void {
   const possiblePaths = [
     path.join(process.env.LOCALAPPDATA || '', 'Programs', 'idm-clone', 'IDM Clone.exe'),
     path.join(process.env.PROGRAMFILES || '', 'IDM Clone', 'IDM Clone.exe'),
-    path.join(__dirname, '..', 'IDM Clone.exe')
+    path.join(__dirname, '..', 'IDM Clone.exe'),
+    path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Download Manager', 'Download Manager.exe'),
+    path.join(process.env.PROGRAMFILES || '', 'Download Manager', 'Download Manager.exe')
   ];
 
   for (const appPath of possiblePaths) {
