@@ -20,7 +20,7 @@ export function DownloadList() {
     return (
       <div className="flex-1 flex items-center justify-center animate-fade-in">
         <div className="text-center max-w-[280px]">
-          <div className="w-16 h-16 rounded-3xl bg-surface-glass mx-auto mb-5 flex items-center justify-center">
+          <div className="w-16 h-16 rounded-3xl bg-surface-2 mx-auto mb-5 flex items-center justify-center">
             <ArrowDownToLine size={28} className="text-label-quaternary" />
           </div>
           <p className="text-[15px] font-semibold text-label-primary mb-1.5">No downloads yet</p>

@@ -1,1 +1,5 @@
 node_modules
+out
+dist
+native-host/dist
+public/favicon.ico
