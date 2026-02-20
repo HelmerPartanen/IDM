@@ -14,6 +14,7 @@ import { registerSettingsHandlers, getSettings } from './ipc/settings-handlers';
 import { registerScheduleHandlers } from './ipc/schedule-handlers';
 import { createTray, destroyTray } from './tray';
 import { PipeServer } from './native-messaging/pipe-server';
+import { runSetup } from './setup';
 import { IPC } from '../shared/types';
 
 let mainWindow: BrowserWindow | null = null;
@@ -83,6 +84,9 @@ async function initializeApp(): Promise<void> {
 
   // Load settings
   const settings = getSettings();
+
+  // Run automatic setup (registry, manifest path, etc.)
+  await runSetup();
 
   // Ensure download folder exists
   if (!fs.existsSync(settings.downloadFolder)) {

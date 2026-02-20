@@ -84,7 +84,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   downloadFolder: '',
   maxThreadsPerDownload: 8,
   maxConcurrentDownloads: 3,
-  autoStartOnBoot: false,
+  autoStartOnBoot: true,
   speedLimitEnabled: false,
   speedLimitBytesPerSec: 0,
   minimizeToTray: true,

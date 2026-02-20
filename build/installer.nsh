@@ -3,10 +3,10 @@
 
 Function .onInstSuccess
   ; Register native host for Chrome (current user)
-  WriteRegStr HKCU "Software\\Google\\Chrome\\NativeMessagingHosts\\com.idm.clone" "" "$INSTDIR\\native-host\\com.idm.clone.json"
+  WriteRegStr HKCU "Software\\Google\\Chrome\\NativeMessagingHosts\\com.idm.clone" "" "$INSTDIR\\resources\\native-host\\com.idm.clone.json"
 
   ; Register native host for Edge (current user)
-  WriteRegStr HKCU "Software\\Microsoft\\Edge\\NativeMessagingHosts\\com.idm.clone" "" "$INSTDIR\\native-host\\com.idm.clone.json"
+  WriteRegStr HKCU "Software\\Microsoft\\Edge\\NativeMessagingHosts\\com.idm.clone" "" "$INSTDIR\\resources\\native-host\\com.idm.clone.json"
 
   ; Optional: you can log the registration to a file for debugging
   ; FileOpen $0 "$INSTDIR\\native-host\\install.log" a
