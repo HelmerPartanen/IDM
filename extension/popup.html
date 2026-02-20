@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>IDM Clone</title>
+  <title>Download Manager</title>
   <style>
     * {
       margin: 0;
@@ -12,34 +12,43 @@
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #1a1b2e;
-      color: #e2e8f0;
-      width: 360px;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
+      background: #000000;
+      color: #ffffff;
+      width: 340px;
       min-height: 200px;
+      letter-spacing: -0.01em;
     }
 
+    /* ── Header ── */
     .header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 16px;
-      border-bottom: 1px solid #2a2c4a;
+      padding: 16px 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
     }
 
-    .header h1 {
-      font-size: 16px;
-      font-weight: 700;
+    .brand {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
     }
 
-    .header h1 span {
-      color: #3b82f6;
+    .brand-icon {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
     }
 
-    /* Toggle switch */
+    .brand h1 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #ffffff;
+      letter-spacing: -0.01em;
+    }
+
+    /* ── Toggle switch (Apple-style) ── */
     .toggle-container {
       display: flex;
       align-items: center;
@@ -48,110 +57,123 @@
 
     .toggle-label {
       font-size: 12px;
-      color: #94a3b8;
+      font-weight: 500;
+      color: #a0a0a5;
     }
 
     .toggle {
       position: relative;
       width: 40px;
       height: 22px;
-      background: #2a2c4a;
+      background: #3a3a3c;
       border-radius: 11px;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: background 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
     }
 
     .toggle.active {
-      background: #3b82f6;
+      background: #0A84FF;
     }
 
     .toggle .knob {
       position: absolute;
-      top: 3px;
-      left: 3px;
-      width: 16px;
-      height: 16px;
+      top: 2px;
+      left: 2px;
+      width: 18px;
+      height: 18px;
       background: white;
       border-radius: 50%;
-      transition: transform 0.2s;
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
     }
 
     .toggle.active .knob {
       transform: translateX(18px);
     }
 
-    /* Status */
+    /* ── Status bar ── */
     .status-bar {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 10px 16px;
-      background: #151627;
+      padding: 10px 18px;
+      background: rgba(255,255,255,0.03);
       font-size: 12px;
+      color: #a0a0a5;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 7px;
     }
 
     .status-dot {
-      display: inline-block;
-      width: 8px;
-      height: 8px;
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
-      margin-right: 6px;
+      flex-shrink: 0;
     }
 
     .status-dot.connected {
-      background: #22c55e;
+      background: #30D158;
+      box-shadow: 0 0 6px rgba(48, 209, 88, 0.4);
     }
 
     .status-dot.disconnected {
-      background: #ef4444;
+      background: #FF453A;
+      box-shadow: 0 0 6px rgba(255, 69, 58, 0.3);
     }
 
-    /* Settings section */
+    /* ── Section ── */
     .section {
-      padding: 12px 16px;
-      border-bottom: 1px solid #2a2c4a;
+      padding: 14px 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
     }
 
     .section-title {
       font-size: 11px;
       font-weight: 600;
-      color: #64748b;
+      color: #8e8e93;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 8px;
+      letter-spacing: 0.04em;
+      margin-bottom: 10px;
     }
 
+    /* ── Setting rows ── */
     .setting-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 6px 0;
+      padding: 7px 0;
     }
 
     .setting-label {
       font-size: 13px;
-      color: #94a3b8;
+      color: #c5c5ca;
     }
 
     .setting-value {
       font-size: 13px;
-      color: #e2e8f0;
-      background: #1e2040;
-      border: 1px solid #2a2c4a;
-      border-radius: 6px;
-      padding: 4px 10px;
+      color: #ffffff;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      padding: 5px 10px;
       text-align: right;
-      width: 100px;
+      width: 80px;
+      transition: border-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
     }
 
     .setting-value:focus {
-      border-color: #3b82f6;
+      border-color: rgba(10, 132, 255, 0.5);
+      background: rgba(255,255,255,0.08);
       outline: none;
     }
 
-    /* Recent downloads */
+    /* ── Download list ── */
     .download-list {
-      max-height: 200px;
+      max-height: 180px;
       overflow-y: auto;
     }
 
@@ -159,18 +181,31 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 8px 16px;
-      border-bottom: 1px solid #2a2c4a20;
+      padding: 9px 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
       font-size: 12px;
+      transition: background 0.2s;
     }
 
     .download-item:hover {
-      background: #1e204080;
+      background: rgba(255,255,255,0.04);
     }
 
     .download-icon {
-      font-size: 16px;
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
+      background: rgba(10, 132, 255, 0.12);
+      display: flex;
+      align-items: center;
+      justify-content: center;
       flex-shrink: 0;
+    }
+
+    .download-icon svg {
+      width: 14px;
+      height: 14px;
+      color: #0A84FF;
     }
 
     .download-info {
@@ -179,15 +214,16 @@
     }
 
     .download-filename {
-      color: #e2e8f0;
+      color: #ffffff;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
       font-weight: 500;
+      font-size: 12px;
     }
 
     .download-url {
-      color: #64748b;
+      color: #7c7c80;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -196,59 +232,68 @@
     }
 
     .download-time {
-      color: #64748b;
+      color: #7c7c80;
       font-size: 11px;
       flex-shrink: 0;
     }
 
     .download-status {
-      font-size: 11px;
-      padding: 2px 6px;
-      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 5px;
       flex-shrink: 0;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
     }
 
     .download-status.sent {
-      color: #22c55e;
-      background: rgba(34, 197, 94, 0.1);
+      color: #30D158;
+      background: rgba(48, 209, 88, 0.12);
     }
 
     .download-status.failed {
-      color: #ef4444;
-      background: rgba(239, 68, 68, 0.1);
+      color: #FF453A;
+      background: rgba(255, 69, 58, 0.12);
     }
 
     .empty-state {
       text-align: center;
-      padding: 24px 16px;
-      color: #64748b;
+      padding: 24px 18px;
+      color: #7c7c80;
       font-size: 13px;
     }
 
+    /* ── Test button ── */
     .test-btn {
       display: block;
-      width: calc(100% - 32px);
-      margin: 12px 16px;
-      padding: 8px;
-      background: #1e2040;
-      border: 1px solid #2a2c4a;
-      border-radius: 8px;
-      color: #94a3b8;
+      width: calc(100% - 36px);
+      margin: 14px 18px;
+      padding: 9px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      color: #c5c5ca;
       font-size: 12px;
+      font-weight: 500;
       cursor: pointer;
       text-align: center;
-      transition: all 0.2s;
+      transition: all 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
     }
 
     .test-btn:hover {
-      background: #2a2c4a;
-      color: #e2e8f0;
-      border-color: #3b82f6;
+      background: rgba(255,255,255,0.10);
+      color: #ffffff;
+      border-color: rgba(10, 132, 255, 0.4);
     }
 
-    /* Scrollbar */
+    .test-btn:active {
+      transform: scale(0.98);
+    }
+
+    /* ── Scrollbar ── */
     ::-webkit-scrollbar {
-      width: 4px;
+      width: 5px;
     }
 
     ::-webkit-scrollbar-track {
@@ -256,14 +301,21 @@
     }
 
     ::-webkit-scrollbar-thumb {
-      background: #2a2c4a;
-      border-radius: 2px;
+      background: rgba(255,255,255,0.12);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255,255,255,0.2);
     }
   </style>
 </head>
 <body>
   <div class="header">
-    <h1>⚡ <span>IDM Clone</span></h1>
+    <div class="brand">
+      <img src="icons/icon48.png" class="brand-icon" alt="">
+      <h1>Download Manager</h1>
+    </div>
     <div class="toggle-container">
       <span class="toggle-label" id="toggle-label">Active</span>
       <div class="toggle active" id="toggle" role="switch" tabindex="0">
@@ -273,9 +325,9 @@
   </div>
 
   <div class="status-bar">
-    <div>
+    <div class="status-indicator">
       <span class="status-dot disconnected" id="status-dot"></span>
-      <span id="status-text">Checking connection...</span>
+      <span id="status-text">Checking connection…</span>
     </div>
   </div>
 
@@ -300,7 +352,7 @@
     </div>
   </div>
 
-  <button class="test-btn" id="test-btn">Test Connection to IDM Clone</button>
+  <button class="test-btn" id="test-btn">Test Connection</button>
 
   <script src="popup.js"></script>
 </body>

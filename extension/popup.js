@@ -66,7 +66,7 @@ toggleEl.addEventListener('click', () => {
 
 function updateConnectionStatus(connected) {
   statusDotEl.className = 'status-dot ' + (connected ? 'connected' : 'disconnected');
-  statusTextEl.textContent = connected ? 'Connected to IDM Clone' : 'Not connected';
+  statusTextEl.textContent = connected ? 'Connected to Download Manager' : 'Not connected';
 }
 
 // ─── Test Connection ─────────────────────────────────────────────────────────
@@ -78,11 +78,11 @@ testBtnEl.addEventListener('click', () => {
   chrome.runtime.sendMessage({ type: 'TEST_CONNECTION' }, (response) => {
     updateConnectionStatus(response?.connected || false);
     testBtnEl.textContent = response?.connected
-      ? '✓ Connection successful!'
+      ? '✓ Connected!'
       : '✕ Connection failed';
 
     setTimeout(() => {
-      testBtnEl.textContent = 'Test Connection to IDM Clone';
+      testBtnEl.textContent = 'Test Connection';
       testBtnEl.disabled = false;
     }, 2000);
   });
@@ -128,7 +128,9 @@ function renderDownloadList(downloads) {
 
     return `
       <div class="download-item" title="${escapeHtml(dl.url)}">
-        <span class="download-icon">📄</span>
+        <div class="download-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+        </div>
         <div class="download-info">
           <div class="download-filename">${escapeHtml(filename)}</div>
           <div class="download-url">${escapeHtml(dl.url)}</div>
