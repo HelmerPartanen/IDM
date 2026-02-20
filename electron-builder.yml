@@ -23,23 +23,23 @@ nsis:
   include: resources/installer.nsh
 files:
   - out/**/*
-  - node_modules/**/*
-  - '!node_modules/.bin'
-  - '!node_modules/@types/**'
-  - '!node_modules/typescript/**'
-  - '!node_modules/electron/**'
-  - '!node_modules/electron-builder/**'
-  - '!node_modules/*/test{,s}/**'
-  - '!node_modules/*/docs/**'
+  - package.json
+  - "!**/node_modules/**/*"
+  - node_modules/better-sqlite3/**
+  - node_modules/bindings/**
+  - node_modules/file-uri-to-path/**
+asarUnpack:
+  - node_modules/better-sqlite3/**/*.node
 extraResources:
   - from: native-host/
     to: native-host
     filter:
-      - '**/*'
+      - idm-native-host.exe
+      - com.idm.clone.json
   - from: extension/
     to: extension
     filter:
-    - '!node_modules/electron/**'
-    - '!node_modules/electron-builder/**'
+      - '**/*'
+      - '!node_modules/**'
   - from: resources/favicon.ico
     to: favicon.ico
