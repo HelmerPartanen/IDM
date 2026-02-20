@@ -11,23 +11,28 @@ export function createTray(
   queueManager: QueueManager
 ): Tray {
   // Choose proper icon depending on platform.
-  const iconName = process.platform === 'win32' ? 'icon.ico' : 'icon.png';
+  const iconNames = process.platform === 'win32'
+    ? ['favicon.ico', 'icon.ico']
+    : ['icon.png', 'favicon.png'];
 
   // Candidate locations to look for the icon when packaged or in dev.
-  const candidates = [
-    path.join(process.resourcesPath, iconName), // resources/iconName
-    path.join(process.resourcesPath, 'app.asar', iconName),
-    path.join(process.resourcesPath, 'app.asar', 'resources', iconName),
-    path.join(process.resourcesPath, 'app', 'resources', iconName),
-    path.join(__dirname, '../../resources', iconName), // repository resources during dev
-    path.join(__dirname, '../resources', iconName)
-  ];
+  const candidates: string[] = [];
+  for (const name of iconNames) {
+    candidates.push(
+      path.join(process.resourcesPath, name),
+      path.join(process.resourcesPath, 'resources', name),
+      path.join(process.resourcesPath, 'app.asar', 'resources', name),
+      path.join(__dirname, '../../resources', name), // development
+      path.join(__dirname, '../resources', name)      // fallback
+    );
+  }
 
   let resolvedIconPath: string | null = null;
   for (const candidate of candidates) {
     try {
       if (fs.existsSync(candidate)) {
         resolvedIconPath = candidate;
+        log.info('[Tray] Found tray icon at: ' + candidate);
         break;
       }
     } catch (e) {
@@ -36,11 +41,10 @@ export function createTray(
   }
 
   if (!resolvedIconPath) {
-    // If none found, still try the first packaged candidate (may work with asar paths)
-    resolvedIconPath = candidates[0];
+    // If none found, fallback to first candidate as a last resort
+    resolvedIconPath = path.join(process.resourcesPath, iconNames[0]);
+    log.warn('[Tray] No icon found, falling back to: ' + resolvedIconPath);
   }
-
-  log.info('[Tray] Trying tray icon at: ' + resolvedIconPath);
 
   let trayIcon: Electron.NativeImage = nativeImage.createFromPath(resolvedIconPath as string);
   if (!trayIcon || trayIcon.isEmpty()) {

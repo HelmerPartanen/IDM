@@ -2285,31 +2285,34 @@ function registerScheduleHandlers(scheduler2) {
 }
 let tray = null;
 function createTray(mainWindow2, queueManager2) {
-  const iconName = process.platform === "win32" ? "icon.ico" : "icon.png";
-  const candidates = [
-    path.join(process.resourcesPath, iconName),
-    // resources/iconName
-    path.join(process.resourcesPath, "app.asar", iconName),
-    path.join(process.resourcesPath, "app.asar", "resources", iconName),
-    path.join(process.resourcesPath, "app", "resources", iconName),
-    path.join(__dirname, "../../resources", iconName),
-    // repository resources during dev
-    path.join(__dirname, "../resources", iconName)
-  ];
+  const iconNames = process.platform === "win32" ? ["favicon.ico", "icon.ico"] : ["icon.png", "favicon.png"];
+  const candidates = [];
+  for (const name of iconNames) {
+    candidates.push(
+      path.join(process.resourcesPath, name),
+      path.join(process.resourcesPath, "resources", name),
+      path.join(process.resourcesPath, "app.asar", "resources", name),
+      path.join(__dirname, "../../resources", name),
+      // development
+      path.join(__dirname, "../resources", name)
+      // fallback
+    );
+  }
   let resolvedIconPath = null;
   for (const candidate of candidates) {
     try {
       if (fs.existsSync(candidate)) {
         resolvedIconPath = candidate;
+        log.info("[Tray] Found tray icon at: " + candidate);
         break;
       }
     } catch (e) {
     }
   }
   if (!resolvedIconPath) {
-    resolvedIconPath = candidates[0];
+    resolvedIconPath = path.join(process.resourcesPath, iconNames[0]);
+    log.warn("[Tray] No icon found, falling back to: " + resolvedIconPath);
   }
-  log.info("[Tray] Trying tray icon at: " + resolvedIconPath);
   let trayIcon = electron.nativeImage.createFromPath(resolvedIconPath);
   if (!trayIcon || trayIcon.isEmpty()) {
     log.warn("[Tray] Tray icon is empty or failed to load: " + resolvedIconPath);
