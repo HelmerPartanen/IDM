@@ -145,7 +145,7 @@ function ToolbarButton({
     <button
       onClick={onClick}
       disabled={disabled}
-      className="flex items-center gap-1.5 text-[13px] text-label-secondary
+      className="flex items-center gap-1.5 text-[13px] font-medium text-label-secondary
         hover:text-label-primary disabled:text-label-quaternary
         disabled:cursor-not-allowed px-2.5 py-[5px] rounded-lg
         hover:bg-surface-glass-hover active:bg-surface-glass-active
