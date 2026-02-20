@@ -2284,12 +2284,37 @@ function registerScheduleHandlers(scheduler2) {
 }
 let tray = null;
 function createTray(mainWindow2, queueManager2) {
-  const iconPath = path.join(__dirname, "../../resources/icon.png");
-  let trayIcon;
-  try {
-    trayIcon = electron.nativeImage.createFromPath(iconPath);
-  } catch {
+  const iconName = process.platform === "win32" ? "icon.ico" : "icon.png";
+  const candidates = [
+    path.join(process.resourcesPath, iconName),
+    // resources/iconName
+    path.join(process.resourcesPath, "app.asar", iconName),
+    path.join(process.resourcesPath, "app.asar", "resources", iconName),
+    path.join(process.resourcesPath, "app", "resources", iconName),
+    path.join(__dirname, "../../resources", iconName),
+    // repository resources during dev
+    path.join(__dirname, "../resources", iconName)
+  ];
+  let resolvedIconPath = null;
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) {
+        resolvedIconPath = candidate;
+        break;
+      }
+    } catch (e) {
+    }
+  }
+  if (!resolvedIconPath) {
+    resolvedIconPath = candidates[0];
+  }
+  log.info("[Tray] Trying tray icon at: " + resolvedIconPath);
+  let trayIcon = electron.nativeImage.createFromPath(resolvedIconPath);
+  if (!trayIcon || trayIcon.isEmpty()) {
+    log.warn("[Tray] Tray icon is empty or failed to load: " + resolvedIconPath);
     trayIcon = electron.nativeImage.createEmpty();
+  } else {
+    log.info("[Tray] Loaded tray icon successfully");
   }
   tray = new electron.Tray(trayIcon);
   tray.setToolTip("IDM Clone - Download Manager");

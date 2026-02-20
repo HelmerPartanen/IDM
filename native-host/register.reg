@@ -6,5 +6,5 @@ Windows Registry Editor Version 5.00
 ; IMPORTANT: Update the path below to match your installation location.
 ; The path must point to the com.idm.clone.json manifest file.
 
-[HKEY_CURRENT_USER\Software\Google\Chrome\NativeMessagingHosts\com.idm.clone]
+[HKEY_CURRENT_USER\Software\Google\Chrome\NativeMessagingHosts\com.dm.clone]
 @="C:\\Program Files\\IDM Clone\\native-host\\com.idm.clone.json"

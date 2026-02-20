@@ -29,7 +29,7 @@ export function Sidebar() {
       {/* Brand */}
       <div className="px-5 pt-5 pb-4 drag-region">
         <div className="no-drag flex items-center gap-2.5">
-          <img src="/favicon.ico" alt="" className="w-7 h-7" draggable={false} />
+          <img src="./favicon.ico" alt="" className="w-7 h-7" draggable={false} />
           <div>
             <p className="text-[13px] font-semibold text-label-primary tracking-tight leading-none">Download Manager</p>
             {globalSpeed > 0 && (

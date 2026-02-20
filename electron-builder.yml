@@ -23,8 +23,14 @@ nsis:
   include: resources/installer.nsh
 files:
   - out/**/*
-  - '!node_modules/**/*'
-  - node_modules/better-sqlite3/**/*
+  - node_modules/**/*
+  - '!node_modules/.bin'
+  - '!node_modules/@types/**'
+  - '!node_modules/typescript/**'
+  - '!node_modules/electron/**'
+  - '!node_modules/electron-builder/**'
+  - '!node_modules/*/test{,s}/**'
+  - '!node_modules/*/docs/**'
 extraResources:
   - from: native-host/dist/
     to: native-host/
@@ -33,5 +39,5 @@ extraResources:
   - from: extension/
     to: extension/
     filter:
-      - '**/*'
-      - '!node_modules/**'
+    - '!node_modules/electron/**'
+    - '!node_modules/electron-builder/**'
