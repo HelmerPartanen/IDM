@@ -24,6 +24,10 @@ let queueManager: QueueManager;
 let scheduler: Scheduler;
 let pipeServer: PipeServer;
 
+/** Timer that destroys the renderer after the window has been hidden with no active downloads. */
+let idleSuspendTimer: NodeJS.Timeout | null = null;
+const IDLE_SUSPEND_DELAY_MS = 30_000; // 30 seconds hidden with no activity → destroy renderer
+
 function createWindow(): BrowserWindow {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -43,7 +47,8 @@ function createWindow(): BrowserWindow {
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: true
+      webSecurity: true,
+      backgroundThrottling: true   // throttle timers/animations when hidden
     },
     backgroundColor: '#000000',
     icon: app.isPackaged
@@ -61,6 +66,7 @@ function createWindow(): BrowserWindow {
     if (settings.minimizeToTray && !(app as any).isQuitting) {
       event.preventDefault();
       mainWindow?.hide();
+      scheduleIdleSuspend();
     }
   });
 
@@ -78,7 +84,55 @@ function createWindow(): BrowserWindow {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
   }
 
+  // Wire up progress tracker to this window
+  progressTracker.setWindow(mainWindow);
+
   return mainWindow;
+}
+
+/** Show the main window, recreating the renderer if it was destroyed during idle. */
+function showWindow(): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    cancelIdleSuspend();
+    mainWindow.show();
+    mainWindow.focus();
+  } else {
+    // Renderer was destroyed to save memory — recreate it
+    cancelIdleSuspend();
+    const win = createWindow();
+    log.info('[Main] Renderer recreated from idle suspension');
+    win.once('ready-to-show', () => {
+      win.show();
+      win.focus();
+    });
+  }
+}
+
+/**
+ * Schedule the renderer for destruction if no downloads are active.
+ * Called when the window is hidden to the tray.
+ */
+function scheduleIdleSuspend(): void {
+  cancelIdleSuspend();
+  idleSuspendTimer = setTimeout(() => {
+    idleSuspendTimer = null;
+    // Don't destroy if downloads are running or window is visible
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      if (engine.getActiveDownloadIds().length === 0) {
+        log.info('[Main] No active downloads — suspending renderer to free memory');
+        progressTracker.clearWindow();
+        mainWindow.destroy();
+        mainWindow = null;
+      }
+    }
+  }, IDLE_SUSPEND_DELAY_MS);
+}
+
+function cancelIdleSuspend(): void {
+  if (idleSuspendTimer) {
+    clearTimeout(idleSuspendTimer);
+    idleSuspendTimer = null;
+  }
 }
 
 async function initializeApp(): Promise<void> {
@@ -120,16 +174,19 @@ async function initializeApp(): Promise<void> {
 
   // Forward engine events to renderer
   engine.on('download-added', (item) => {
-    mainWindow?.webContents.send(IPC.DOWNLOAD_ADDED, item);
-    // Show window if hidden
-    if (mainWindow && !mainWindow.isVisible()) {
-      mainWindow.show();
-      mainWindow.focus();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC.DOWNLOAD_ADDED, item);
+    }
+    // Show window if hidden (recreates renderer if needed)
+    if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) {
+      showWindow();
     }
   });
 
   engine.on('status-changed', (id, status) => {
-    mainWindow?.webContents.send(IPC.DOWNLOAD_STATUS_CHANGED, id, status);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC.DOWNLOAD_STATUS_CHANGED, id, status);
+    }
   });
 
   engine.on('download-complete', (item) => {
@@ -183,6 +240,7 @@ async function initializeApp(): Promise<void> {
   // App control IPC
   ipcMain.on(IPC.APP_MINIMIZE_TO_TRAY, () => {
     mainWindow?.hide();
+    scheduleIdleSuspend();
   });
 
   ipcMain.on(IPC.APP_QUIT, () => {
@@ -209,11 +267,10 @@ app.whenReady().then(async () => {
   await initializeApp();
 
   const window = createWindow();
-  progressTracker.setWindow(window);
   progressTracker.start();
 
   // Create system tray
-  createTray(window, queueManager);
+  createTray(showWindow, queueManager);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -237,6 +294,7 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
   log.info('[Main] Application shutting down');
 
+  cancelIdleSuspend();
   progressTracker?.stop();
   pipeServer?.stop();
   scheduler?.destroy();
@@ -254,11 +312,6 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized() || !mainWindow.isVisible()) {
-        mainWindow.show();
-      }
-      mainWindow.focus();
-    }
+    showWindow();
   });
 }

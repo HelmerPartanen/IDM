@@ -3997,8 +3997,22 @@ class ProgressTracker {
   backgroundIntervalMs = 500;
   // 2 Hz when minimized / background
   isWindowVisible = true;
+  isRunning = false;
+  // whether the tracker has been started
+  hasActiveDownloads = false;
+  // cached state to avoid unnecessary starts/stops
   constructor(engine2) {
     this.engine = engine2;
+    const onActivity = () => this.onDownloadsChanged(true);
+    engine2.on("download-added", onActivity);
+    engine2.on("download-resumed", onActivity);
+    const onInactive = () => {
+      setTimeout(() => this.checkIdle(), 100);
+    };
+    engine2.on("download-complete", onInactive);
+    engine2.on("download-error", onInactive);
+    engine2.on("download-paused", onInactive);
+    engine2.on("download-cancelled", onInactive);
   }
   setWindow(window2) {
     this.mainWindow = window2;
@@ -4025,12 +4039,47 @@ class ProgressTracker {
     window2.on("blur", () => {
     });
   }
+  /** Clear the window reference (e.g. when window is destroyed for idle suspension). */
+  clearWindow() {
+    this.mainWindow = null;
+  }
   start() {
-    if (this.intervalId) return;
-    this.scheduleInterval(this.activeIntervalMs);
-    log.info("[ProgressTracker] Started progress tracking");
+    this.isRunning = true;
+    if (this.engine.getActiveDownloadIds().length > 0) {
+      this.startInterval();
+    }
+    log.info("[ProgressTracker] Ready (activity-driven)");
   }
   stop() {
+    this.isRunning = false;
+    this.stopInterval();
+  }
+  /** Returns true when the interval is actually ticking. */
+  get isTicking() {
+    return this.intervalId !== null;
+  }
+  onDownloadsChanged(active) {
+    if (!this.isRunning) return;
+    if (active && !this.intervalId) {
+      this.hasActiveDownloads = true;
+      this.startInterval();
+    }
+  }
+  checkIdle() {
+    if (!this.isRunning) return;
+    const count = this.engine.getActiveDownloadIds().length;
+    if (count === 0 && this.intervalId) {
+      this.hasActiveDownloads = false;
+      this.stopInterval();
+      log.info("[ProgressTracker] All downloads idle — interval stopped");
+    }
+  }
+  startInterval() {
+    if (this.intervalId) return;
+    const ms = this.isWindowVisible ? this.activeIntervalMs : this.backgroundIntervalMs;
+    this.intervalId = setInterval(() => this.sendProgressBatch(), ms);
+  }
+  stopInterval() {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
@@ -4040,12 +4089,7 @@ class ProgressTracker {
     if (!this.intervalId) return;
     const desiredMs = this.isWindowVisible ? this.activeIntervalMs : this.backgroundIntervalMs;
     clearInterval(this.intervalId);
-    this.scheduleInterval(desiredMs);
-  }
-  scheduleInterval(ms) {
-    this.intervalId = setInterval(() => {
-      this.sendProgressBatch();
-    }, ms);
+    this.intervalId = setInterval(() => this.sendProgressBatch(), desiredMs);
   }
   sendProgressBatch() {
     if (!this.mainWindow || this.mainWindow.isDestroyed()) return;
@@ -20067,7 +20111,7 @@ function registerScheduleHandlers(scheduler2) {
   log.info("[IPC] Schedule handlers registered");
 }
 let tray = null;
-function createTray(mainWindow2, queueManager2) {
+function createTray(showWindowFn, queueManager2) {
   const iconPath = require$$0.app.isPackaged ? path$6.join(process.resourcesPath, "favicon.ico") : path$6.join(__dirname, "../../resources/favicon.ico");
   let trayIcon = require$$0.nativeImage.createFromPath(iconPath);
   if (!trayIcon || trayIcon.isEmpty()) {
@@ -20083,8 +20127,7 @@ function createTray(mainWindow2, queueManager2) {
     {
       label: "Show Download Manager",
       click: () => {
-        mainWindow2.show();
-        mainWindow2.focus();
+        showWindowFn();
       }
     },
     { type: "separator" },
@@ -20110,8 +20153,7 @@ function createTray(mainWindow2, queueManager2) {
   ]);
   tray.setContextMenu(contextMenu);
   tray.on("double-click", () => {
-    mainWindow2.show();
-    mainWindow2.focus();
+    showWindowFn();
   });
   log.info("[Tray] System tray created");
   return tray;
@@ -20310,6 +20352,8 @@ let progressTracker;
 let queueManager;
 let scheduler;
 let pipeServer;
+let idleSuspendTimer = null;
+const IDLE_SUSPEND_DELAY_MS = 3e4;
 function createWindow() {
   mainWindow = new require$$0.BrowserWindow({
     width: 1200,
@@ -20329,7 +20373,9 @@ function createWindow() {
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: true
+      webSecurity: true,
+      backgroundThrottling: true
+      // throttle timers/animations when hidden
     },
     backgroundColor: "#000000",
     icon: require$$0.app.isPackaged ? path$6.join(process.resourcesPath, "favicon.ico") : path$6.join(__dirname, "../../resources/favicon.ico")
@@ -20342,6 +20388,7 @@ function createWindow() {
     if (settings.minimizeToTray && !require$$0.app.isQuitting) {
       event.preventDefault();
       mainWindow?.hide();
+      scheduleIdleSuspend();
     }
   });
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -20354,7 +20401,43 @@ function createWindow() {
   } else {
     mainWindow.loadFile(path$6.join(__dirname, "../renderer/index.html"));
   }
+  progressTracker.setWindow(mainWindow);
   return mainWindow;
+}
+function showWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    cancelIdleSuspend();
+    mainWindow.show();
+    mainWindow.focus();
+  } else {
+    cancelIdleSuspend();
+    const win = createWindow();
+    log.info("[Main] Renderer recreated from idle suspension");
+    win.once("ready-to-show", () => {
+      win.show();
+      win.focus();
+    });
+  }
+}
+function scheduleIdleSuspend() {
+  cancelIdleSuspend();
+  idleSuspendTimer = setTimeout(() => {
+    idleSuspendTimer = null;
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      if (engine.getActiveDownloadIds().length === 0) {
+        log.info("[Main] No active downloads — suspending renderer to free memory");
+        progressTracker.clearWindow();
+        mainWindow.destroy();
+        mainWindow = null;
+      }
+    }
+  }, IDLE_SUSPEND_DELAY_MS);
+}
+function cancelIdleSuspend() {
+  if (idleSuspendTimer) {
+    clearTimeout(idleSuspendTimer);
+    idleSuspendTimer = null;
+  }
 }
 async function initializeApp() {
   initDatabase();
@@ -20374,14 +20457,17 @@ async function initializeApp() {
   registerSettingsHandlers();
   registerScheduleHandlers(scheduler);
   engine.on("download-added", (item) => {
-    mainWindow?.webContents.send(IPC.DOWNLOAD_ADDED, item);
-    if (mainWindow && !mainWindow.isVisible()) {
-      mainWindow.show();
-      mainWindow.focus();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC.DOWNLOAD_ADDED, item);
+    }
+    if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) {
+      showWindow();
     }
   });
   engine.on("status-changed", (id2, status) => {
-    mainWindow?.webContents.send(IPC.DOWNLOAD_STATUS_CHANGED, id2, status);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC.DOWNLOAD_STATUS_CHANGED, id2, status);
+    }
   });
   engine.on("download-complete", (item) => {
     const settings2 = getSettings();
@@ -20428,6 +20514,7 @@ async function initializeApp() {
   });
   require$$0.ipcMain.on(IPC.APP_MINIMIZE_TO_TRAY, () => {
     mainWindow?.hide();
+    scheduleIdleSuspend();
   });
   require$$0.ipcMain.on(IPC.APP_QUIT, () => {
     require$$0.app.quit();
@@ -20437,14 +20524,13 @@ async function initializeApp() {
 require$$0.app.isQuitting = false;
 require$$0.app.whenReady().then(async () => {
   electronApp.setAppUserModelId("com.idm.clone");
-  require$$0.app.on("browser-window-created", (_, window22) => {
-    optimizer.watchWindowShortcuts(window22);
+  require$$0.app.on("browser-window-created", (_, window2) => {
+    optimizer.watchWindowShortcuts(window2);
   });
   await initializeApp();
-  const window2 = createWindow();
-  progressTracker.setWindow(window2);
+  createWindow();
   progressTracker.start();
-  createTray(window2, queueManager);
+  createTray(showWindow, queueManager);
   require$$0.app.on("activate", () => {
     if (require$$0.BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -20462,6 +20548,7 @@ require$$0.app.on("window-all-closed", () => {
 });
 require$$0.app.on("will-quit", () => {
   log.info("[Main] Application shutting down");
+  cancelIdleSuspend();
   progressTracker?.stop();
   pipeServer?.stop();
   scheduler?.destroy();
@@ -20475,11 +20562,6 @@ if (!gotLock) {
   require$$0.app.quit();
 } else {
   require$$0.app.on("second-instance", () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized() || !mainWindow.isVisible()) {
-        mainWindow.show();
-      }
-      mainWindow.focus();
-    }
+    showWindow();
   });
 }

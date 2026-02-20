@@ -1,4 +1,4 @@
-import { Tray, Menu, nativeImage, app, BrowserWindow } from 'electron';
+import { Tray, Menu, nativeImage, app } from 'electron';
 import path from 'path';
 import log from 'electron-log';
 import { QueueManager } from './download-engine/queue-manager';
@@ -6,7 +6,7 @@ import { QueueManager } from './download-engine/queue-manager';
 let tray: Tray | null = null;
 
 export function createTray(
-  mainWindow: BrowserWindow,
+  showWindowFn: () => void,
   queueManager: QueueManager
 ): Tray {
   // In packaged builds the extraResources copies favicon.ico to resourcesPath.
@@ -32,8 +32,7 @@ export function createTray(
     {
       label: 'Show Download Manager',
       click: () => {
-        mainWindow.show();
-        mainWindow.focus();
+        showWindowFn();
       }
     },
     { type: 'separator' },
@@ -61,8 +60,7 @@ export function createTray(
   tray.setContextMenu(contextMenu);
 
   tray.on('double-click', () => {
-    mainWindow.show();
-    mainWindow.focus();
+    showWindowFn();
   });
 
   log.info('[Tray] System tray created');
