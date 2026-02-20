@@ -57,9 +57,8 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="px-5 py-4 border-t border-surface-3 bg-surface-1">
-        <p className="text-[11px] text-label-quaternary tracking-wide font-medium flex items-center justify-between">
-          <span>v1.0.0</span>
-          <span className="w-2 h-2 rounded-full bg-semantic-success shadow-pulse animate-pulse-glow" />
+        <p className="text-[11px] text-label-quaternary tracking-wide font-medium">
+          v1.0.0
         </p>
       </div>
     </aside>

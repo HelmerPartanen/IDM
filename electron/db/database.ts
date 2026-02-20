@@ -29,6 +29,12 @@ export function initDatabase(): Database.Database {
   db.pragma('journal_mode = WAL');
   db.pragma('synchronous = NORMAL');
   db.pragma('foreign_keys = ON');
+  // Increase page cache for faster reads (8 MB)
+  db.pragma('cache_size = -8000');
+  // Memory-map up to 64 MB for faster I/O
+  db.pragma('mmap_size = 67108864');
+  // Keep temp tables in memory
+  db.pragma('temp_store = MEMORY');
 
   runMigrations(db);
 
@@ -91,6 +97,11 @@ function runMigrations(database: Database.Database): void {
 
 export function closeDatabase(): void {
   if (db) {
+    // Invalidate prepared statement cache before closing
+    try {
+      const { clearStmtCache } = require('./models');
+      clearStmtCache();
+    } catch { /* models may not be loaded */ }
     db.close();
     db = null;
     log.info('Database closed');

@@ -157,6 +157,5 @@ export const IPC = {
   SCHEDULE_ADD: 'schedule:add',
   SCHEDULE_REMOVE: 'schedule:remove',
   SCHEDULE_LIST: 'schedule:list',
-  GET_FILE_ICON: 'app:get-file-icon',
   GET_FAVICON: 'app:get-favicon',
 } as const;

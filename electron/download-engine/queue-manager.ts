@@ -1,39 +1,77 @@
 import PQueue from 'p-queue';
 import log from 'electron-log';
 import { DownloadEngine } from './engine';
-import type { DownloadItem, Priority } from '../../shared/types';
+import type { DownloadItem, Priority, AppSettings } from '../../shared/types';
 import * as models from '../db/models';
 
 /**
  * Manages the global download queue with concurrency limits and priority support.
  * Uses p-queue for reliable concurrency control.
+ * Supports auto-retry of failed downloads when enabled in settings.
  */
 export class QueueManager {
   private engine: DownloadEngine;
   private queue: PQueue;
   private pendingItems: Map<string, { priority: number; addedAt: number }> = new Map();
+  private retryCounts: Map<string, number> = new Map();
+  private settings: AppSettings;
 
-  constructor(engine: DownloadEngine, maxConcurrent: number = 3) {
+  constructor(engine: DownloadEngine, maxConcurrent: number = 3, settings?: AppSettings) {
     this.engine = engine;
+    this.settings = settings || {} as AppSettings;
 
     this.queue = new PQueue({
       concurrency: maxConcurrent,
       autoStart: true
     });
 
-    // When a download completes, log queue status
+    // When a download completes, clean up and log queue status
     this.engine.on('download-complete', (item: DownloadItem) => {
       log.info(`[QueueManager] Download complete: ${item.filename}. Queue: ${this.queue.size} pending, ${this.queue.pending} active`);
       this.pendingItems.delete(item.id);
+      this.retryCounts.delete(item.id);
     });
 
-    this.engine.on('download-error', (id: string) => {
+    this.engine.on('download-error', (id: string, error: string) => {
       this.pendingItems.delete(id);
+
+      // Auto-retry the download if enabled
+      if (this.settings.autoRetryFailed) {
+        const retries = this.retryCounts.get(id) || 0;
+        const maxRetries = this.settings.maxRetries || 3;
+        if (retries < maxRetries) {
+          this.retryCounts.set(id, retries + 1);
+          const delay = Math.min(5000 * Math.pow(2, retries), 60000);
+          log.info(`[QueueManager] Auto-retrying ${id} in ${delay / 1000}s (attempt ${retries + 1}/${maxRetries})`);
+          setTimeout(async () => {
+            const item = models.getDownload(id);
+            if (item && item.status === 'error') {
+              try {
+                await this.engine.retryDownload(id);
+                await this.enqueue(id, item.priority);
+              } catch (e: any) {
+                log.error(`[QueueManager] Auto-retry of ${id} failed:`, e.message);
+              }
+            }
+          }, delay);
+        } else {
+          log.info(`[QueueManager] Auto-retry exhausted for ${id} (${maxRetries} attempts)`);
+          this.retryCounts.delete(id);
+        }
+      }
     });
 
     this.engine.on('download-cancelled', (id: string) => {
       this.pendingItems.delete(id);
+      this.retryCounts.delete(id);
     });
+  }
+
+  /**
+   * Update settings (e.g. when user changes them at runtime).
+   */
+  updateSettings(settings: Partial<AppSettings>): void {
+    this.settings = { ...this.settings, ...settings };
   }
 
   /**
@@ -46,8 +84,14 @@ export class QueueManager {
 
   /**
    * Enqueue a download. It will start when a slot is available.
+   * Skips items that are already actively downloading to prevent double-starts.
    */
   async enqueue(id: string, priority: Priority = 'normal'): Promise<void> {
+    // Guard: skip if already downloading
+    if (this.engine.getActiveDownloadIds().includes(id)) {
+      return;
+    }
+
     const priorityValue = this.priorityToNumber(priority);
 
     this.pendingItems.set(id, { priority: priorityValue, addedAt: Date.now() });
@@ -63,6 +107,10 @@ export class QueueManager {
       async () => {
         const current = models.getDownload(id);
         if (!current || current.status === 'completed' || current.status === 'error') {
+          return;
+        }
+        // Double-check not already active (race condition guard)
+        if (this.engine.getActiveDownloadIds().includes(id)) {
           return;
         }
         try {
@@ -92,9 +140,7 @@ export class QueueManager {
   async pauseAll(): Promise<void> {
     this.queue.pause();
     const activeIds = this.engine.getActiveDownloadIds();
-    for (const id of activeIds) {
-      await this.engine.pauseDownload(id);
-    }
+    await Promise.allSettled(activeIds.map(id => this.engine.pauseDownload(id)));
     log.info('[QueueManager] All downloads paused');
   }
 

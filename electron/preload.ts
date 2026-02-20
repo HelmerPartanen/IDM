@@ -33,7 +33,6 @@ export interface ElectronAPI {
   listSchedules: () => Promise<{ success: boolean; schedules?: ScheduleInfo[]; error?: string }>;
 
   // File icons
-  getFileIcon: (filePath: string) => Promise<string | null>;
   getFavicon: (domain: string) => Promise<string | null>;
 
   // Events
@@ -74,7 +73,6 @@ const api: ElectronAPI = {
   listSchedules: () => ipcRenderer.invoke(IPC.SCHEDULE_LIST),
 
   // File icons
-  getFileIcon: (filePath) => ipcRenderer.invoke(IPC.GET_FILE_ICON, filePath),
   getFavicon: (domain) => ipcRenderer.invoke(IPC.GET_FAVICON, domain),
 
   // Events from main process

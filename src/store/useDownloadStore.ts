@@ -56,24 +56,34 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
   }),
 
   updateProgress: (updates) => set((state) => {
-    let totalSpeed = 0;
-    const downloadMap = new Map(state.downloads.map(d => [d.id, { ...d }]));
+    if (updates.length === 0) return state;
 
-    for (const update of updates) {
-      const existing = downloadMap.get(update.id);
-      if (existing) {
-        existing.downloadedBytes = update.downloadedBytes;
-        existing.speed = update.speed;
-        existing.eta = update.eta;
-        existing.status = update.status;
-        totalSpeed += update.speed;
+    let totalSpeed = 0;
+    let anyChanged = false;
+    const downloads = state.downloads;
+    const newDownloads: DownloadItem[] = new Array(downloads.length);
+
+    // Build a lookup of updates by id for O(1) access
+    const updateMap = new Map<string, DownloadProgressUpdate>();
+    for (const u of updates) {
+      updateMap.set(u.id, u);
+      totalSpeed += u.speed;
+    }
+
+    for (let i = 0; i < downloads.length; i++) {
+      const d = downloads[i];
+      const u = updateMap.get(d.id);
+      if (u && (d.downloadedBytes !== u.downloadedBytes || d.speed !== u.speed ||
+                d.eta !== u.eta || d.status !== u.status)) {
+        newDownloads[i] = { ...d, downloadedBytes: u.downloadedBytes, speed: u.speed, eta: u.eta, status: u.status };
+        anyChanged = true;
+      } else {
+        newDownloads[i] = d;
       }
     }
 
-    return {
-      downloads: Array.from(downloadMap.values()),
-      globalSpeed: totalSpeed
-    };
+    if (!anyChanged && state.globalSpeed === totalSpeed) return state;
+    return { downloads: anyChanged ? newDownloads : downloads, globalSpeed: totalSpeed };
   }),
 
   updateStatus: (id, status) => set((state) => ({
@@ -126,8 +136,8 @@ export const useDownloadStore = create<DownloadStore>((set, get) => ({
         error: ['error'],
         scheduled: ['scheduled']
       };
-      const statuses = statusMap[filter];
-      filtered = filtered.filter(d => statuses.includes(d.status));
+      const statuses = new Set(statusMap[filter]);
+      filtered = filtered.filter(d => statuses.has(d.status));
     }
 
     // Apply search filter

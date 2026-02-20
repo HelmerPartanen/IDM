@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeImage, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import { join } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import log from 'electron-log';
@@ -47,7 +47,7 @@ function createWindow(): BrowserWindow {
     },
     backgroundColor: '#000000',
     icon: app.isPackaged
-      ? join(process.resourcesPath, 'resources/favicon.ico')
+      ? join(process.resourcesPath, 'favicon.ico')
       : join(__dirname, '../../resources/favicon.ico')
   });
 
@@ -100,7 +100,7 @@ async function initializeApp(): Promise<void> {
   engine = new DownloadEngine(settings);
 
   // Initialize queue manager
-  queueManager = new QueueManager(engine, settings.maxConcurrentDownloads);
+  queueManager = new QueueManager(engine, settings.maxConcurrentDownloads, settings);
 
   // Initialize progress tracker
   progressTracker = new ProgressTracker(engine);
@@ -140,17 +140,6 @@ async function initializeApp(): Promise<void> {
         title: 'Download Complete',
         body: `${item.filename} has been downloaded successfully.`
       }).show();
-    }
-  });
-
-  // File icon IPC — returns a data URL of the system icon for a file path/extension
-  ipcMain.handle(IPC.GET_FILE_ICON, async (_event, filePath: string) => {
-    try {
-      const icon = await app.getFileIcon(filePath, { size: 'large' });
-      return icon.toDataURL();
-    } catch (err: any) {
-      log.warn('[IPC] get-file-icon failed:', err.message);
-      return null;
     }
   });
 
@@ -253,6 +242,11 @@ app.on('will-quit', () => {
   scheduler?.destroy();
   destroyTray();
   closeDatabase();
+
+  // Destroy persistent HTTP agents
+  const { httpsAgent, httpAgent } = require('./download-engine/engine');
+  httpsAgent?.destroy();
+  httpAgent?.destroy();
 });
 
 // Prevent multiple instances

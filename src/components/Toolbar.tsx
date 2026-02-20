@@ -129,8 +129,6 @@ export function Toolbar() {
       >
         <Minus size={14} strokeWidth={2} />
       </button>
-      {/* Divider */}
-      <div className="w-px h-5 bg-surface-4 mx-1" />
     </div>
   );
 }

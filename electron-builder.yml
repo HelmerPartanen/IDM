@@ -41,3 +41,5 @@ extraResources:
     filter:
     - '!node_modules/electron/**'
     - '!node_modules/electron-builder/**'
+  - from: resources/favicon.ico
+    to: favicon.ico

@@ -1,6 +1,5 @@
 import { Tray, Menu, nativeImage, app, BrowserWindow } from 'electron';
 import path from 'path';
-import fs from 'fs';
 import log from 'electron-log';
 import { QueueManager } from './download-engine/queue-manager';
 
@@ -10,48 +9,20 @@ export function createTray(
   mainWindow: BrowserWindow,
   queueManager: QueueManager
 ): Tray {
-  // Choose proper icon depending on platform.
-  const iconNames = process.platform === 'win32'
-    ? ['favicon.ico', 'icon.ico']
-    : ['icon.png', 'favicon.png'];
+  // In packaged builds the extraResources copies favicon.ico to resourcesPath.
+  // In dev builds we resolve from the project root's resources directory.
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'favicon.ico')
+    : path.join(__dirname, '../../resources/favicon.ico');
 
-  // Candidate locations to look for the icon when packaged or in dev.
-  const candidates: string[] = [];
-  for (const name of iconNames) {
-    candidates.push(
-      path.join(process.resourcesPath, name),
-      path.join(process.resourcesPath, 'resources', name),
-      path.join(process.resourcesPath, 'app.asar', 'resources', name),
-      path.join(__dirname, '../../resources', name), // development
-      path.join(__dirname, '../resources', name)      // fallback
-    );
-  }
-
-  let resolvedIconPath: string | null = null;
-  for (const candidate of candidates) {
-    try {
-      if (fs.existsSync(candidate)) {
-        resolvedIconPath = candidate;
-        log.info('[Tray] Found tray icon at: ' + candidate);
-        break;
-      }
-    } catch (e) {
-      // ignore and try next
-    }
-  }
-
-  if (!resolvedIconPath) {
-    // If none found, fallback to first candidate as a last resort
-    resolvedIconPath = path.join(process.resourcesPath, iconNames[0]);
-    log.warn('[Tray] No icon found, falling back to: ' + resolvedIconPath);
-  }
-
-  let trayIcon: Electron.NativeImage = nativeImage.createFromPath(resolvedIconPath as string);
+  let trayIcon = nativeImage.createFromPath(iconPath);
   if (!trayIcon || trayIcon.isEmpty()) {
-    log.warn('[Tray] Tray icon is empty or failed to load: ' + resolvedIconPath);
+    log.warn('[Tray] Tray icon failed to load from: ' + iconPath);
     trayIcon = nativeImage.createEmpty();
   } else {
-    log.info('[Tray] Loaded tray icon successfully');
+    // Resize to standard tray size (16x16) for crisp rendering
+    trayIcon = trayIcon.resize({ width: 16, height: 16 });
+    log.info('[Tray] Loaded tray icon from: ' + iconPath);
   }
 
   tray = new Tray(trayIcon);

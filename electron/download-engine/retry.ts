@@ -33,11 +33,14 @@ export function calculateRetryDelay(attempt: number, config: RetryConfig = DEFAU
  * - Do NOT retry on 4xx (except 429 Too Many Requests)
  */
 export function isRetryableError(error: any): boolean {
-  // Network-level errors
-  if (error.code === 'ECONNRESET' || error.code === 'ECONNREFUSED' ||
-      error.code === 'ETIMEDOUT' || error.code === 'EPIPE' ||
-      error.code === 'ENOTFOUND' || error.code === 'EAI_AGAIN' ||
-      error.code === 'EHOSTUNREACH' || error.code === 'ENETUNREACH') {
+  // Network-level errors — always retryable
+  const retryableCodes = new Set([
+    'ECONNRESET', 'ECONNREFUSED', 'ECONNABORTED',
+    'ETIMEDOUT', 'EPIPE', 'ENOTFOUND', 'EAI_AGAIN',
+    'EHOSTUNREACH', 'ENETUNREACH', 'ENETDOWN',
+    'EPROTO', 'ERR_SOCKET_TIMEOUT', 'HPE_HEADER_OVERFLOW'
+  ]);
+  if (error.code && retryableCodes.has(error.code)) {
     return true;
   }
 
@@ -46,14 +49,18 @@ export function isRetryableError(error: any): boolean {
   if (statusCode) {
     // 429 Too Many Requests - retryable
     if (statusCode === 429) return true;
+    // 408 Request Timeout - retryable
+    if (statusCode === 408) return true;
+    // 503 Service Unavailable - retryable
+    if (statusCode === 503) return true;
     // 5xx Server errors - retryable
     if (statusCode >= 500 && statusCode < 600) return true;
-    // 4xx Client errors - NOT retryable (except 429 above)
+    // 4xx Client errors - NOT retryable (except above)
     if (statusCode >= 400 && statusCode < 500) return false;
   }
 
   // Timeout errors
-  if (error.name === 'TimeoutError' || error.message?.includes('timeout')) {
+  if (error.name === 'TimeoutError' || error.message?.includes('timeout') || error.message?.includes('Stall')) {
     return true;
   }
 

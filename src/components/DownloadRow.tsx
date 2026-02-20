@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo, useCallback } from 'react';
 import {
   Pause, Play, RotateCcw, FolderOpen, X, Trash2,
   ArrowDownToLine
@@ -19,12 +19,10 @@ interface DownloadRowProps {
   style?: React.CSSProperties;
 }
 
-export function DownloadRow({ item, style }: DownloadRowProps) {
+export const DownloadRow = memo(function DownloadRow({ item, style }: DownloadRowProps) {
   const { pauseDownload, resumeDownload, cancelDownload, retryDownload, deleteDownload, openFile, openFolder } = useDownloadActions();
-  const selectedIds = useDownloadStore(s => s.selectedIds);
+  const isSelected = useDownloadStore(useCallback((s) => s.selectedIds.has(item.id), [item.id]));
   const toggleSelected = useDownloadStore(s => s.toggleSelected);
-
-  const isSelected = selectedIds.has(item.id);
   const isCompleted = item.status === 'completed';
   const progress = isCompleted ? 100 : getProgress(item.downloadedBytes, item.totalSize);
   const statusDisplay = getStatusDisplay(item.status);
@@ -169,7 +167,7 @@ export function DownloadRow({ item, style }: DownloadRowProps) {
       </div>
     </div>
   );
-}
+});
 
 function ActionBtn({
   onClick, title, children, accent, danger

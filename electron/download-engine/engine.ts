@@ -7,7 +7,7 @@ import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
 import log from 'electron-log';
 import { SegmentDownloader } from './segment';
-import { allocateFile, openFileForResume, closeFile, verifyFileSize } from './file-allocator';
+import { allocateFile, openFileForResume, closeFile, verifyFileSize, checkDiskSpace } from './file-allocator';
 import { DEFAULT_RETRY_CONFIG } from './retry';
 import * as models from '../db/models';
 import type {
@@ -33,10 +33,29 @@ interface ActiveDownload {
   segments: SegmentDownloader[];
   segmentInfos: SegmentInfo[];
   fd: number | null;
-  speedSamples: number[];
   lastProgressTime: number;
+  lastProgressBytes: number;
+  speedEma: number;           // Exponential moving average speed
   hashStream: crypto.Hash | null;
 }
+
+/** Persistent HTTP agents for connection reuse / keep-alive */
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 30000,
+  maxSockets: 64,             // Total concurrent sockets per host
+  maxFreeSockets: 16,         // Kept idle for reuse
+  timeout: 60000,
+});
+const httpAgent = new http.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 30000,
+  maxSockets: 64,
+  maxFreeSockets: 16,
+  timeout: 60000,
+});
+
+export { httpsAgent, httpAgent };
 
 export class DownloadEngine extends EventEmitter {
   private activeDownloads: Map<string, ActiveDownload> = new Map();
@@ -58,12 +77,27 @@ export class DownloadEngine extends EventEmitter {
 
   getProgressUpdates(): DownloadProgressUpdate[] {
     const updates: DownloadProgressUpdate[] = [];
+    const now = Date.now();
+
     for (const [id, active] of this.activeDownloads) {
-      const now = Date.now();
-      const speed = this.calculateSpeed(active);
-      const eta = speed > 0
-        ? (active.item.totalSize - active.item.downloadedBytes) / speed
-        : 0;
+      const elapsed = (now - active.lastProgressTime) / 1000;
+      let speed = active.speedEma;
+
+      if (elapsed > 0.05) {
+        const bytesInInterval = active.item.downloadedBytes - active.lastProgressBytes;
+        const instantSpeed = bytesInInterval / elapsed;
+        // EMA smoothing factor α = 0.3 (responsive but smooth)
+        const alpha = 0.3;
+        speed = active.speedEma > 0
+          ? alpha * instantSpeed + (1 - alpha) * active.speedEma
+          : instantSpeed;
+        active.speedEma = speed;
+        active.lastProgressBytes = active.item.downloadedBytes;
+        active.lastProgressTime = now;
+      }
+
+      const remaining = active.item.totalSize - active.item.downloadedBytes;
+      const eta = speed > 0 ? remaining / speed : 0;
 
       updates.push({
         id,
@@ -83,10 +117,10 @@ export class DownloadEngine extends EventEmitter {
   async addDownload(request: AddDownloadRequest): Promise<DownloadItem> {
     const { url, referrer, priority, checksum, checksumType } = request;
 
-    // Probe the URL to get file info
+    // Resolve the final URL by following redirects during probe
     const probeResult = await this.probeUrl(url, referrer || null);
 
-    const filename = request.filename || probeResult.filename || this.filenameFromUrl(url);
+    const filename = request.filename || probeResult.filename || this.filenameFromUrl(probeResult.finalUrl || url);
     const savePath = request.savePath || path.join(this.settings.downloadFolder, filename);
     const threads = request.threads || this.settings.maxThreadsPerDownload;
 
@@ -96,9 +130,17 @@ export class DownloadEngine extends EventEmitter {
       fs.mkdirSync(saveDir, { recursive: true });
     }
 
+    // Check disk space before starting
+    if (probeResult.totalSize > 0) {
+      const hasSpace = await checkDiskSpace(saveDir, probeResult.totalSize);
+      if (!hasSpace) {
+        throw new Error(`Insufficient disk space. Need ${this.formatSize(probeResult.totalSize)} free.`);
+      }
+    }
+
     const item: DownloadItem = {
       id: uuidv4(),
-      url,
+      url: probeResult.finalUrl || url,   // Use resolved (redirected) URL
       filename,
       savePath,
       totalSize: probeResult.totalSize,
@@ -125,6 +167,14 @@ export class DownloadEngine extends EventEmitter {
     this.emit('status-changed', item.id, item.status);
 
     return item;
+  }
+
+  private formatSize(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
 
   /**
@@ -282,8 +332,9 @@ export class DownloadEngine extends EventEmitter {
       segments: [],
       segmentInfos,
       fd,
-      speedSamples: [],
       lastProgressTime: Date.now(),
+      lastProgressBytes: 0,
+      speedEma: 0,
       hashStream: null
     };
 
@@ -310,7 +361,6 @@ export class DownloadEngine extends EventEmitter {
 
       downloader.on('progress', (index: number, bytesDownloaded: number, chunkSize: number) => {
         active.item.downloadedBytes += chunkSize;
-        active.speedSamples.push(chunkSize);
 
         // Update segment info
         const segIdx = active.segmentInfos.findIndex(s => s.index === index);
@@ -401,8 +451,9 @@ export class DownloadEngine extends EventEmitter {
       segments: [],
       segmentInfos: [],
       fd: null,
-      speedSamples: [],
       lastProgressTime: Date.now(),
+      lastProgressBytes: 0,
+      speedEma: 0,
       hashStream: null
     };
 
@@ -414,8 +465,9 @@ export class DownloadEngine extends EventEmitter {
       const httpModule = isHttps ? https : http;
 
       const headers: Record<string, string> = {
-        'User-Agent': 'IDM-Clone/1.0',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
         'Connection': 'keep-alive'
       };
 
@@ -431,6 +483,7 @@ export class DownloadEngine extends EventEmitter {
         path: parsedUrl.pathname + parsedUrl.search,
         method: 'GET',
         headers,
+        agent: isHttps ? httpsAgent : httpAgent,
         timeout: 30000
       };
 
@@ -440,6 +493,7 @@ export class DownloadEngine extends EventEmitter {
           // Follow redirect
           res.resume();
           item.url = new URL(res.headers.location, item.url).href;
+          models.updateDownload(item.id, { url: item.url });
           this.startSingleConnectionDownload(item).then(resolve).catch(reject);
           return;
         }
@@ -462,7 +516,6 @@ export class DownloadEngine extends EventEmitter {
             return resolve();
           }
           active.item.downloadedBytes += chunk.length;
-          active.speedSamples.push(chunk.length);
         });
 
         res.pipe(writeStream);
@@ -521,14 +574,29 @@ export class DownloadEngine extends EventEmitter {
     supportsRange: boolean;
     filename: string | null;
     mime: string | null;
+    finalUrl: string | null;
   }> {
+    return this._probeUrl(url, referrer, 0);
+  }
+
+  private _probeUrl(url: string, referrer: string | null, redirectCount: number): Promise<{
+    totalSize: number;
+    supportsRange: boolean;
+    filename: string | null;
+    mime: string | null;
+    finalUrl: string | null;
+  }> {
+    if (redirectCount > 10) {
+      return Promise.resolve({ totalSize: 0, supportsRange: false, filename: null, mime: null, finalUrl: url });
+    }
+
     return new Promise((resolve, reject) => {
       const parsedUrl = new URL(url);
       const isHttps = parsedUrl.protocol === 'https:';
       const httpModule = isHttps ? https : http;
 
       const headers: Record<string, string> = {
-        'User-Agent': 'IDM-Clone/1.0',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         'Accept': '*/*'
       };
 
@@ -542,6 +610,7 @@ export class DownloadEngine extends EventEmitter {
         path: parsedUrl.pathname + parsedUrl.search,
         method: 'HEAD',
         headers,
+        agent: isHttps ? httpsAgent : httpAgent,
         timeout: 15000
       };
 
@@ -552,18 +621,18 @@ export class DownloadEngine extends EventEmitter {
         if (statusCode >= 300 && statusCode < 400 && res.headers.location) {
           res.resume();
           const newUrl = new URL(res.headers.location, url).href;
-          this.probeUrl(newUrl, referrer).then(resolve).catch(reject);
+          this._probeUrl(newUrl, referrer, redirectCount + 1).then(resolve).catch(reject);
           return;
         }
 
         if (statusCode !== 200 && statusCode !== 206) {
           res.resume();
-          // Fall back to unknown size
           return resolve({
             totalSize: 0,
             supportsRange: false,
             filename: null,
-            mime: null
+            mime: null,
+            finalUrl: url
           });
         }
 
@@ -576,9 +645,15 @@ export class DownloadEngine extends EventEmitter {
         let filename: string | null = null;
         const contentDisp = res.headers['content-disposition'];
         if (contentDisp) {
-          const match = contentDisp.match(/filename\*?=(?:UTF-8''|"?)([^";]+)"?/i);
-          if (match) {
-            filename = decodeURIComponent(match[1]);
+          // Try RFC 5987 filename*=UTF-8''... first, then regular filename="..."
+          const matchStar = contentDisp.match(/filename\*=(?:UTF-8''|utf-8'')([^;\s]+)/i);
+          if (matchStar) {
+            filename = decodeURIComponent(matchStar[1]);
+          } else {
+            const matchPlain = contentDisp.match(/filename="?([^";\n]+)"?/i);
+            if (matchPlain) {
+              filename = matchPlain[1].trim();
+            }
           }
         }
 
@@ -589,18 +664,19 @@ export class DownloadEngine extends EventEmitter {
           totalSize: contentLength,
           supportsRange,
           filename,
-          mime
+          mime,
+          finalUrl: url
         });
       });
 
       req.on('error', (err) => {
         log.warn(`[Engine] HEAD request failed for ${url}:`, err.message);
-        // Don't reject — fall back to single-connection
         resolve({
           totalSize: 0,
           supportsRange: false,
           filename: null,
-          mime: null
+          mime: null,
+          finalUrl: url
         });
       });
 
@@ -610,7 +686,8 @@ export class DownloadEngine extends EventEmitter {
           totalSize: 0,
           supportsRange: false,
           filename: null,
-          mime: null
+          mime: null,
+          finalUrl: url
         });
       });
 
@@ -628,25 +705,6 @@ export class DownloadEngine extends EventEmitter {
       }
     } catch { /* ignore */ }
     return `download_${Date.now()}`;
-  }
-
-  private calculateSpeed(active: ActiveDownload): number {
-    const now = Date.now();
-    const elapsed = (now - active.lastProgressTime) / 1000;
-
-    if (elapsed <= 0) return active.item.speed;
-
-    const totalBytes = active.speedSamples.reduce((sum, b) => sum + b, 0);
-    const speed = totalBytes / elapsed;
-
-    // Reset samples periodically
-    if (elapsed >= 1) {
-      active.speedSamples = [];
-      active.lastProgressTime = now;
-      active.item.speed = speed;
-    }
-
-    return speed;
   }
 
   private setStatus(id: string, status: DownloadStatus): void {

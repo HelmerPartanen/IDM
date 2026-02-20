@@ -10,9 +10,9 @@ const http = require("http");
 const crypto = require("crypto");
 const events = require("events");
 const uuid = require("uuid");
+const child_process = require("child_process");
 const Store = require("electron-store");
 const net = require("net");
-const child_process = require("child_process");
 let db = null;
 function getDbPath() {
   const userDataPath = electron.app.getPath("userData");
@@ -32,6 +32,9 @@ function initDatabase() {
   db.pragma("journal_mode = WAL");
   db.pragma("synchronous = NORMAL");
   db.pragma("foreign_keys = ON");
+  db.pragma("cache_size = -8000");
+  db.pragma("mmap_size = 67108864");
+  db.pragma("temp_store = MEMORY");
   runMigrations(db);
   log.info("Database initialized successfully");
   return db;
@@ -90,15 +93,62 @@ function runMigrations(database) {
 }
 function closeDatabase() {
   if (db) {
+    try {
+      const { clearStmtCache } = require("./models");
+      clearStmtCache();
+    } catch {
+    }
     db.close();
     db = null;
     log.info("Database closed");
   }
 }
+async function checkDiskSpace(dir, requiredBytes) {
+  try {
+    if (process.platform === "win32") {
+      const drive = path.parse(path.resolve(dir)).root.replace("\\", "");
+      return new Promise((resolve) => {
+        child_process.exec(`wmic logicaldisk where "DeviceID='${drive}'" get FreeSpace /value`, (err, stdout) => {
+          if (err) {
+            resolve(true);
+            return;
+          }
+          const match = stdout.match(/FreeSpace=(\d+)/);
+          if (match) {
+            const free = parseInt(match[1], 10);
+            const sufficient = free > requiredBytes * 1.1;
+            if (!sufficient) {
+              log.warn(`[FileAllocator] Low disk space: ${formatBytes(free)} free, need ${formatBytes(requiredBytes)}`);
+            }
+            resolve(sufficient);
+          } else {
+            resolve(true);
+          }
+        });
+      });
+    }
+    return true;
+  } catch {
+    return true;
+  }
+}
 async function allocateFile(filePath, totalSize) {
   return new Promise((resolve, reject) => {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+      } catch (mkdirErr) {
+        log.error(`[FileAllocator] Cannot create directory: ${dir}`, mkdirErr.message);
+        return reject(new Error(`Cannot create download directory: ${mkdirErr.message}`));
+      }
+    }
     fs.open(filePath, "w+", (err, fd) => {
       if (err) {
+        if (err.code === "EACCES" || err.code === "EPERM") {
+          log.error(`[FileAllocator] Permission denied: ${filePath}`);
+          return reject(new Error(`Permission denied for: ${filePath}`));
+        }
         log.error(`[FileAllocator] Failed to open file: ${filePath}`, err.message);
         return reject(err);
       }
@@ -108,6 +158,12 @@ async function allocateFile(filePath, totalSize) {
       }
       fs.ftruncate(fd, totalSize, (err2) => {
         if (err2) {
+          if (err2.code === "ENOSPC") {
+            log.error(`[FileAllocator] Disk full — cannot allocate ${formatBytes(totalSize)} for: ${filePath}`);
+            fs.close(fd, () => {
+            });
+            return reject(new Error(`Disk full. Need ${formatBytes(totalSize)} free.`));
+          }
           log.error(`[FileAllocator] Failed to allocate ${totalSize} bytes for: ${filePath}`, err2.message);
           fs.close(fd, () => {
           });
@@ -121,6 +177,9 @@ async function allocateFile(filePath, totalSize) {
 }
 async function openFileForResume(filePath) {
   return new Promise((resolve, reject) => {
+    if (!fs.existsSync(filePath)) {
+      return reject(new Error(`File not found for resume: ${filePath}`));
+    }
     fs.open(filePath, "r+", (err, fd) => {
       if (err) {
         log.error(`[FileAllocator] Failed to open file for resume: ${filePath}`, err.message);
@@ -145,6 +204,9 @@ async function writeAtOffset(fd, buffer, offset, length) {
   return new Promise((resolve, reject) => {
     fs.write(fd, buffer, 0, length, offset, (err, bytesWritten) => {
       if (err) {
+        if (err.code === "ENOSPC") {
+          return reject(new Error("Disk full during write"));
+        }
         return reject(err);
       }
       resolve(bytesWritten);
@@ -155,7 +217,11 @@ async function verifyFileSize(filePath, expectedSize) {
   return new Promise((resolve, reject) => {
     fs.stat(filePath, (err, stats) => {
       if (err) return reject(err);
-      resolve(stats.size === expectedSize);
+      const match = stats.size === expectedSize;
+      if (!match) {
+        log.warn(`[FileAllocator] Size mismatch: expected ${formatBytes(expectedSize)}, got ${formatBytes(stats.size)}`);
+      }
+      resolve(match);
     });
   });
 }
@@ -185,16 +251,33 @@ function calculateRetryDelay(attempt, config = DEFAULT_RETRY_CONFIG) {
   return Math.floor(baseDelay);
 }
 function isRetryableError(error) {
-  if (error.code === "ECONNRESET" || error.code === "ECONNREFUSED" || error.code === "ETIMEDOUT" || error.code === "EPIPE" || error.code === "ENOTFOUND" || error.code === "EAI_AGAIN" || error.code === "EHOSTUNREACH" || error.code === "ENETUNREACH") {
+  const retryableCodes = /* @__PURE__ */ new Set([
+    "ECONNRESET",
+    "ECONNREFUSED",
+    "ECONNABORTED",
+    "ETIMEDOUT",
+    "EPIPE",
+    "ENOTFOUND",
+    "EAI_AGAIN",
+    "EHOSTUNREACH",
+    "ENETUNREACH",
+    "ENETDOWN",
+    "EPROTO",
+    "ERR_SOCKET_TIMEOUT",
+    "HPE_HEADER_OVERFLOW"
+  ]);
+  if (error.code && retryableCodes.has(error.code)) {
     return true;
   }
   const statusCode = error.statusCode || error.response?.statusCode;
   if (statusCode) {
     if (statusCode === 429) return true;
+    if (statusCode === 408) return true;
+    if (statusCode === 503) return true;
     if (statusCode >= 500 && statusCode < 600) return true;
     if (statusCode >= 400 && statusCode < 500) return false;
   }
-  if (error.name === "TimeoutError" || error.message?.includes("timeout")) {
+  if (error.name === "TimeoutError" || error.message?.includes("timeout") || error.message?.includes("Stall")) {
     return true;
   }
   return true;
@@ -235,18 +318,20 @@ async function withRetry(fn, config = DEFAULT_RETRY_CONFIG, label = "operation")
   }
   throw lastError;
 }
+const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+const STALL_TIMEOUT_MS = 45e3;
 class SegmentDownloader extends events.EventEmitter {
   segment;
   url;
   fd;
   retryConfig;
-  abortController = null;
   currentRequest = null;
   _paused = false;
   _cancelled = false;
   speedLimit;
   // bytes per second, 0 = unlimited
   referrer;
+  stallTimer = null;
   constructor(segment, url, fd, retryConfig, speedLimit = 0, referrer = null) {
     super();
     this.segment = { ...segment };
@@ -275,12 +360,14 @@ class SegmentDownloader extends events.EventEmitter {
   }
   pause() {
     this._paused = true;
+    this.clearStallTimer();
     this.abort();
     this.segment.status = "paused";
     this.emit("paused", this.segment.index);
   }
   cancel() {
     this._cancelled = true;
+    this.clearStallTimer();
     this.abort();
   }
   resume() {
@@ -290,6 +377,22 @@ class SegmentDownloader extends events.EventEmitter {
     if (this.currentRequest) {
       this.currentRequest.destroy();
       this.currentRequest = null;
+    }
+  }
+  resetStallTimer(res, reject) {
+    this.clearStallTimer();
+    this.stallTimer = setTimeout(() => {
+      log.warn(`[Segment ${this.segment.index}] Stall detected — no data for ${STALL_TIMEOUT_MS / 1e3}s`);
+      res.destroy();
+      const err = new Error(`Stall timeout on segment ${this.segment.index}`);
+      err.code = "ETIMEDOUT";
+      reject(err);
+    }, STALL_TIMEOUT_MS);
+  }
+  clearStallTimer() {
+    if (this.stallTimer) {
+      clearTimeout(this.stallTimer);
+      this.stallTimer = null;
     }
   }
   downloadSegment() {
@@ -309,10 +412,11 @@ class SegmentDownloader extends events.EventEmitter {
       const httpModule = isHttps ? https : http;
       const headers = {
         "Range": `bytes=${startByte}-${endByte}`,
-        "User-Agent": "IDM-Clone/1.0",
+        "User-Agent": USER_AGENT,
         "Accept": "*/*",
         "Accept-Encoding": "identity",
         // Don't use compression — we need exact byte ranges
+        "Accept-Language": "en-US,en;q=0.9",
         "Connection": "keep-alive"
       };
       if (this.referrer) {
@@ -324,11 +428,19 @@ class SegmentDownloader extends events.EventEmitter {
         path: parsedUrl.pathname + parsedUrl.search,
         method: "GET",
         headers,
+        agent: isHttps ? httpsAgent : httpAgent,
         timeout: 3e4
       };
       this.segment.status = "active";
       const req = httpModule.request(options, (res) => {
         const statusCode = res.statusCode || 0;
+        if (statusCode >= 300 && statusCode < 400 && res.headers.location) {
+          res.resume();
+          this.url = new URL(res.headers.location, this.url).href;
+          log.info(`[Segment ${this.segment.index}] Following redirect to: ${this.url}`);
+          this.downloadSegment().then(resolve).catch(reject);
+          return;
+        }
         if (statusCode !== 206 && statusCode !== 200) {
           const error = new Error(`HTTP ${statusCode} for segment ${this.segment.index}`);
           error.statusCode = statusCode;
@@ -338,11 +450,14 @@ class SegmentDownloader extends events.EventEmitter {
         let writeOffset = startByte;
         let tokenBucket = this.speedLimit > 0 ? this.speedLimit : Infinity;
         let lastTokenRefill = Date.now();
+        this.resetStallTimer(res, reject);
         res.on("data", async (chunk) => {
           if (this._paused || this._cancelled) {
+            this.clearStallTimer();
             res.destroy();
             return resolve();
           }
+          this.resetStallTimer(res, reject);
           try {
             if (this.speedLimit > 0) {
               const now = Date.now();
@@ -354,6 +469,7 @@ class SegmentDownloader extends events.EventEmitter {
                 const waitMs = (chunk.length - tokenBucket) / this.speedLimit * 1e3;
                 await new Promise((r) => setTimeout(r, waitMs));
                 if (this._paused || this._cancelled) {
+                  this.clearStallTimer();
                   res.destroy();
                   return resolve();
                 }
@@ -367,11 +483,13 @@ class SegmentDownloader extends events.EventEmitter {
             this.segment.downloadedBytes += chunk.length;
             this.emit("progress", this.segment.index, this.segment.downloadedBytes, chunk.length);
           } catch (writeError) {
+            this.clearStallTimer();
             res.destroy();
             reject(writeError);
           }
         });
         res.on("end", () => {
+          this.clearStallTimer();
           if (this._paused || this._cancelled) {
             return resolve();
           }
@@ -380,13 +498,16 @@ class SegmentDownloader extends events.EventEmitter {
           resolve();
         });
         res.on("error", (err) => {
+          this.clearStallTimer();
           reject(err);
         });
       });
       req.on("error", (err) => {
+        this.clearStallTimer();
         reject(err);
       });
       req.on("timeout", () => {
+        this.clearStallTimer();
         req.destroy();
         const error = new Error(`Timeout for segment ${this.segment.index}`);
         error.code = "ETIMEDOUT";
@@ -396,6 +517,15 @@ class SegmentDownloader extends events.EventEmitter {
       req.end();
     });
   }
+}
+const stmtCache = /* @__PURE__ */ new Map();
+function cachedStmt(key, sql) {
+  let stmt = stmtCache.get(key);
+  if (!stmt) {
+    stmt = getDb().prepare(sql);
+    stmtCache.set(key, stmt);
+  }
+  return stmt;
 }
 function insertDownload(item) {
   const db2 = getDb();
@@ -461,23 +591,19 @@ function updateDownload(id, updates) {
   db2.prepare(`UPDATE downloads SET ${fields.join(", ")} WHERE id = ?`).run(...values);
 }
 function getDownload(id) {
-  const db2 = getDb();
-  const row = db2.prepare("SELECT * FROM downloads WHERE id = ?").get(id);
+  const row = cachedStmt("getDownload", "SELECT * FROM downloads WHERE id = ?").get(id);
   return row ? mapRowToDownload(row) : void 0;
 }
 function getAllDownloads() {
-  const db2 = getDb();
-  const rows = db2.prepare("SELECT * FROM downloads ORDER BY created_at DESC").all();
+  const rows = cachedStmt("getAllDownloads", "SELECT * FROM downloads ORDER BY created_at DESC").all([]);
   return rows.map(mapRowToDownload);
 }
 function getDownloadsByStatus(status) {
-  const db2 = getDb();
-  const rows = db2.prepare("SELECT * FROM downloads WHERE status = ? ORDER BY created_at DESC").all(status);
+  const rows = cachedStmt("getDownloadsByStatus", "SELECT * FROM downloads WHERE status = ? ORDER BY created_at DESC").all(status);
   return rows.map(mapRowToDownload);
 }
 function deleteDownload(id) {
-  const db2 = getDb();
-  db2.prepare("DELETE FROM downloads WHERE id = ?").run(id);
+  cachedStmt("deleteDownload", "DELETE FROM downloads WHERE id = ?").run(id);
 }
 function mapRowToDownload(row) {
   return {
@@ -532,13 +658,11 @@ function updateSegment(downloadId, index, updates) {
   db2.prepare(`UPDATE segments SET ${fields.join(", ")} WHERE download_id = ? AND segment_index = ?`).run(...values);
 }
 function getSegments(downloadId) {
-  const db2 = getDb();
-  const rows = db2.prepare("SELECT * FROM segments WHERE download_id = ? ORDER BY segment_index ASC").all(downloadId);
+  const rows = cachedStmt("getSegments", "SELECT * FROM segments WHERE download_id = ? ORDER BY segment_index ASC").all(downloadId);
   return rows.map(mapRowToSegment);
 }
 function deleteSegments(downloadId) {
-  const db2 = getDb();
-  db2.prepare("DELETE FROM segments WHERE download_id = ?").run(downloadId);
+  cachedStmt("deleteSegments", "DELETE FROM segments WHERE download_id = ?").run(downloadId);
 }
 function bulkUpdateSegments(downloadId, segments) {
   const db2 = getDb();
@@ -591,6 +715,22 @@ function mapRowToSchedule(row) {
     enabled: !!row.enabled
   };
 }
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 3e4,
+  maxSockets: 64,
+  // Total concurrent sockets per host
+  maxFreeSockets: 16,
+  // Kept idle for reuse
+  timeout: 6e4
+});
+const httpAgent = new http.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 3e4,
+  maxSockets: 64,
+  maxFreeSockets: 16,
+  timeout: 6e4
+});
 class DownloadEngine extends events.EventEmitter {
   activeDownloads = /* @__PURE__ */ new Map();
   settings;
@@ -607,9 +747,21 @@ class DownloadEngine extends events.EventEmitter {
   }
   getProgressUpdates() {
     const updates = [];
+    const now = Date.now();
     for (const [id, active] of this.activeDownloads) {
-      const speed = this.calculateSpeed(active);
-      const eta = speed > 0 ? (active.item.totalSize - active.item.downloadedBytes) / speed : 0;
+      const elapsed = (now - active.lastProgressTime) / 1e3;
+      let speed = active.speedEma;
+      if (elapsed > 0.05) {
+        const bytesInInterval = active.item.downloadedBytes - active.lastProgressBytes;
+        const instantSpeed = bytesInInterval / elapsed;
+        const alpha = 0.3;
+        speed = active.speedEma > 0 ? alpha * instantSpeed + (1 - alpha) * active.speedEma : instantSpeed;
+        active.speedEma = speed;
+        active.lastProgressBytes = active.item.downloadedBytes;
+        active.lastProgressTime = now;
+      }
+      const remaining = active.item.totalSize - active.item.downloadedBytes;
+      const eta = speed > 0 ? remaining / speed : 0;
       updates.push({
         id,
         downloadedBytes: active.item.downloadedBytes,
@@ -627,16 +779,23 @@ class DownloadEngine extends events.EventEmitter {
   async addDownload(request) {
     const { url, referrer, priority, checksum, checksumType } = request;
     const probeResult = await this.probeUrl(url, referrer || null);
-    const filename = request.filename || probeResult.filename || this.filenameFromUrl(url);
+    const filename = request.filename || probeResult.filename || this.filenameFromUrl(probeResult.finalUrl || url);
     const savePath = request.savePath || path.join(this.settings.downloadFolder, filename);
     const threads = request.threads || this.settings.maxThreadsPerDownload;
     const saveDir = path.dirname(savePath);
     if (!fs.existsSync(saveDir)) {
       fs.mkdirSync(saveDir, { recursive: true });
     }
+    if (probeResult.totalSize > 0) {
+      const hasSpace = await checkDiskSpace(saveDir, probeResult.totalSize);
+      if (!hasSpace) {
+        throw new Error(`Insufficient disk space. Need ${this.formatSize(probeResult.totalSize)} free.`);
+      }
+    }
     const item = {
       id: uuid.v4(),
-      url,
+      url: probeResult.finalUrl || url,
+      // Use resolved (redirected) URL
       filename,
       savePath,
       totalSize: probeResult.totalSize,
@@ -659,6 +818,13 @@ class DownloadEngine extends events.EventEmitter {
     this.emit("download-added", item);
     this.emit("status-changed", item.id, item.status);
     return item;
+  }
+  formatSize(bytes) {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   }
   /**
    * Start downloading a pending/queued item.
@@ -785,8 +951,9 @@ class DownloadEngine extends events.EventEmitter {
       segments: [],
       segmentInfos,
       fd,
-      speedSamples: [],
       lastProgressTime: Date.now(),
+      lastProgressBytes: 0,
+      speedEma: 0,
       hashStream: null
     };
     this.activeDownloads.set(item.id, active);
@@ -805,7 +972,6 @@ class DownloadEngine extends events.EventEmitter {
       );
       downloader.on("progress", (index, bytesDownloaded, chunkSize) => {
         active.item.downloadedBytes += chunkSize;
-        active.speedSamples.push(chunkSize);
         const segIdx = active.segmentInfos.findIndex((s) => s.index === index);
         if (segIdx >= 0) {
           active.segmentInfos[segIdx].downloadedBytes = bytesDownloaded;
@@ -877,8 +1043,9 @@ class DownloadEngine extends events.EventEmitter {
       segments: [],
       segmentInfos: [],
       fd: null,
-      speedSamples: [],
       lastProgressTime: Date.now(),
+      lastProgressBytes: 0,
+      speedEma: 0,
       hashStream: null
     };
     this.activeDownloads.set(item.id, active);
@@ -887,8 +1054,9 @@ class DownloadEngine extends events.EventEmitter {
       const isHttps = parsedUrl.protocol === "https:";
       const httpModule = isHttps ? https : http;
       const headers = {
-        "User-Agent": "IDM-Clone/1.0",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
         "Connection": "keep-alive"
       };
       if (item.referrer) {
@@ -901,6 +1069,7 @@ class DownloadEngine extends events.EventEmitter {
         path: parsedUrl.pathname + parsedUrl.search,
         method: "GET",
         headers,
+        agent: isHttps ? httpsAgent : httpAgent,
         timeout: 3e4
       };
       const req = httpModule.request(options, (res) => {
@@ -908,6 +1077,7 @@ class DownloadEngine extends events.EventEmitter {
         if (statusCode >= 300 && statusCode < 400 && res.headers.location) {
           res.resume();
           item.url = new URL(res.headers.location, item.url).href;
+          updateDownload(item.id, { url: item.url });
           this.startSingleConnectionDownload(item).then(resolve).catch(reject);
           return;
         }
@@ -927,7 +1097,6 @@ class DownloadEngine extends events.EventEmitter {
             return resolve();
           }
           active.item.downloadedBytes += chunk.length;
-          active.speedSamples.push(chunk.length);
         });
         res.pipe(writeStream);
         writeStream.on("finish", async () => {
@@ -973,12 +1142,18 @@ class DownloadEngine extends events.EventEmitter {
     return segments;
   }
   async probeUrl(url, referrer) {
+    return this._probeUrl(url, referrer, 0);
+  }
+  _probeUrl(url, referrer, redirectCount) {
+    if (redirectCount > 10) {
+      return Promise.resolve({ totalSize: 0, supportsRange: false, filename: null, mime: null, finalUrl: url });
+    }
     return new Promise((resolve, reject) => {
       const parsedUrl = new URL(url);
       const isHttps = parsedUrl.protocol === "https:";
       const httpModule = isHttps ? https : http;
       const headers = {
-        "User-Agent": "IDM-Clone/1.0",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         "Accept": "*/*"
       };
       if (referrer) {
@@ -990,6 +1165,7 @@ class DownloadEngine extends events.EventEmitter {
         path: parsedUrl.pathname + parsedUrl.search,
         method: "HEAD",
         headers,
+        agent: isHttps ? httpsAgent : httpAgent,
         timeout: 15e3
       };
       const req = httpModule.request(options, (res) => {
@@ -997,7 +1173,7 @@ class DownloadEngine extends events.EventEmitter {
         if (statusCode >= 300 && statusCode < 400 && res.headers.location) {
           res.resume();
           const newUrl = new URL(res.headers.location, url).href;
-          this.probeUrl(newUrl, referrer).then(resolve).catch(reject);
+          this._probeUrl(newUrl, referrer, redirectCount + 1).then(resolve).catch(reject);
           return;
         }
         if (statusCode !== 200 && statusCode !== 206) {
@@ -1006,7 +1182,8 @@ class DownloadEngine extends events.EventEmitter {
             totalSize: 0,
             supportsRange: false,
             filename: null,
-            mime: null
+            mime: null,
+            finalUrl: url
           });
         }
         const contentLength = parseInt(res.headers["content-length"] || "0", 10);
@@ -1015,9 +1192,14 @@ class DownloadEngine extends events.EventEmitter {
         let filename = null;
         const contentDisp = res.headers["content-disposition"];
         if (contentDisp) {
-          const match = contentDisp.match(/filename\*?=(?:UTF-8''|"?)([^";]+)"?/i);
-          if (match) {
-            filename = decodeURIComponent(match[1]);
+          const matchStar = contentDisp.match(/filename\*=(?:UTF-8''|utf-8'')([^;\s]+)/i);
+          if (matchStar) {
+            filename = decodeURIComponent(matchStar[1]);
+          } else {
+            const matchPlain = contentDisp.match(/filename="?([^";\n]+)"?/i);
+            if (matchPlain) {
+              filename = matchPlain[1].trim();
+            }
           }
         }
         const mime = res.headers["content-type"]?.split(";")[0]?.trim() || null;
@@ -1026,7 +1208,8 @@ class DownloadEngine extends events.EventEmitter {
           totalSize: contentLength,
           supportsRange,
           filename,
-          mime
+          mime,
+          finalUrl: url
         });
       });
       req.on("error", (err) => {
@@ -1035,7 +1218,8 @@ class DownloadEngine extends events.EventEmitter {
           totalSize: 0,
           supportsRange: false,
           filename: null,
-          mime: null
+          mime: null,
+          finalUrl: url
         });
       });
       req.on("timeout", () => {
@@ -1044,7 +1228,8 @@ class DownloadEngine extends events.EventEmitter {
           totalSize: 0,
           supportsRange: false,
           filename: null,
-          mime: null
+          mime: null,
+          finalUrl: url
         });
       });
       req.end();
@@ -1061,19 +1246,6 @@ class DownloadEngine extends events.EventEmitter {
     } catch {
     }
     return `download_${Date.now()}`;
-  }
-  calculateSpeed(active) {
-    const now = Date.now();
-    const elapsed = (now - active.lastProgressTime) / 1e3;
-    if (elapsed <= 0) return active.item.speed;
-    const totalBytes = active.speedSamples.reduce((sum, b) => sum + b, 0);
-    const speed = totalBytes / elapsed;
-    if (elapsed >= 1) {
-      active.speedSamples = [];
-      active.lastProgressTime = now;
-      active.item.speed = speed;
-    }
-    return speed;
   }
   setStatus(id, status) {
     const active = this.activeDownloads.get(id);
@@ -1183,26 +1355,48 @@ const IPC = {
   SCHEDULE_ADD: "schedule:add",
   SCHEDULE_REMOVE: "schedule:remove",
   SCHEDULE_LIST: "schedule:list",
-  GET_FILE_ICON: "app:get-file-icon",
   GET_FAVICON: "app:get-favicon"
 };
 class ProgressTracker {
   engine;
   mainWindow = null;
   intervalId = null;
-  updateIntervalMs = 100;
-  // 10 updates per second
+  activeIntervalMs = 100;
+  // 10 Hz when window is focused
+  backgroundIntervalMs = 500;
+  // 2 Hz when minimized / background
+  isWindowVisible = true;
   constructor(engine2) {
     this.engine = engine2;
   }
   setWindow(window) {
     this.mainWindow = window;
+    window.on("show", () => {
+      this.isWindowVisible = true;
+      this.adjustInterval();
+    });
+    window.on("hide", () => {
+      this.isWindowVisible = false;
+      this.adjustInterval();
+    });
+    window.on("minimize", () => {
+      this.isWindowVisible = false;
+      this.adjustInterval();
+    });
+    window.on("restore", () => {
+      this.isWindowVisible = true;
+      this.adjustInterval();
+    });
+    window.on("focus", () => {
+      this.isWindowVisible = true;
+      this.adjustInterval();
+    });
+    window.on("blur", () => {
+    });
   }
   start() {
     if (this.intervalId) return;
-    this.intervalId = setInterval(() => {
-      this.sendProgressBatch();
-    }, this.updateIntervalMs);
+    this.scheduleInterval(this.activeIntervalMs);
     log.info("[ProgressTracker] Started progress tracking");
   }
   stop() {
@@ -1210,6 +1404,17 @@ class ProgressTracker {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
+  }
+  adjustInterval() {
+    if (!this.intervalId) return;
+    const desiredMs = this.isWindowVisible ? this.activeIntervalMs : this.backgroundIntervalMs;
+    clearInterval(this.intervalId);
+    this.scheduleInterval(desiredMs);
+  }
+  scheduleInterval(ms) {
+    this.intervalId = setInterval(() => {
+      this.sendProgressBatch();
+    }, ms);
   }
   sendProgressBatch() {
     if (!this.mainWindow || this.mainWindow.isDestroyed()) return;
@@ -1860,8 +2065,11 @@ class QueueManager {
   engine;
   queue;
   pendingItems = /* @__PURE__ */ new Map();
-  constructor(engine2, maxConcurrent = 3) {
+  retryCounts = /* @__PURE__ */ new Map();
+  settings;
+  constructor(engine2, maxConcurrent = 3, settings) {
     this.engine = engine2;
+    this.settings = settings || {};
     this.queue = new PQueue({
       concurrency: maxConcurrent,
       autoStart: true
@@ -1869,13 +2077,44 @@ class QueueManager {
     this.engine.on("download-complete", (item) => {
       log.info(`[QueueManager] Download complete: ${item.filename}. Queue: ${this.queue.size} pending, ${this.queue.pending} active`);
       this.pendingItems.delete(item.id);
+      this.retryCounts.delete(item.id);
     });
-    this.engine.on("download-error", (id) => {
+    this.engine.on("download-error", (id, error) => {
       this.pendingItems.delete(id);
+      if (this.settings.autoRetryFailed) {
+        const retries = this.retryCounts.get(id) || 0;
+        const maxRetries = this.settings.maxRetries || 3;
+        if (retries < maxRetries) {
+          this.retryCounts.set(id, retries + 1);
+          const delay = Math.min(5e3 * Math.pow(2, retries), 6e4);
+          log.info(`[QueueManager] Auto-retrying ${id} in ${delay / 1e3}s (attempt ${retries + 1}/${maxRetries})`);
+          setTimeout(async () => {
+            const item = getDownload(id);
+            if (item && item.status === "error") {
+              try {
+                await this.engine.retryDownload(id);
+                await this.enqueue(id, item.priority);
+              } catch (e) {
+                log.error(`[QueueManager] Auto-retry of ${id} failed:`, e.message);
+              }
+            }
+          }, delay);
+        } else {
+          log.info(`[QueueManager] Auto-retry exhausted for ${id} (${maxRetries} attempts)`);
+          this.retryCounts.delete(id);
+        }
+      }
     });
     this.engine.on("download-cancelled", (id) => {
       this.pendingItems.delete(id);
+      this.retryCounts.delete(id);
     });
+  }
+  /**
+   * Update settings (e.g. when user changes them at runtime).
+   */
+  updateSettings(settings) {
+    this.settings = { ...this.settings, ...settings };
   }
   /**
    * Set the maximum number of concurrent downloads.
@@ -1886,8 +2125,12 @@ class QueueManager {
   }
   /**
    * Enqueue a download. It will start when a slot is available.
+   * Skips items that are already actively downloading to prevent double-starts.
    */
   async enqueue(id, priority = "normal") {
+    if (this.engine.getActiveDownloadIds().includes(id)) {
+      return;
+    }
     const priorityValue = this.priorityToNumber(priority);
     this.pendingItems.set(id, { priority: priorityValue, addedAt: Date.now() });
     const item = getDownload(id);
@@ -1899,6 +2142,9 @@ class QueueManager {
       async () => {
         const current = getDownload(id);
         if (!current || current.status === "completed" || current.status === "error") {
+          return;
+        }
+        if (this.engine.getActiveDownloadIds().includes(id)) {
           return;
         }
         try {
@@ -1926,9 +2172,7 @@ class QueueManager {
   async pauseAll() {
     this.queue.pause();
     const activeIds = this.engine.getActiveDownloadIds();
-    for (const id of activeIds) {
-      await this.engine.pauseDownload(id);
-    }
+    await Promise.allSettled(activeIds.map((id) => this.engine.pauseDownload(id)));
     log.info("[QueueManager] All downloads paused");
   }
   /**
@@ -2287,40 +2531,14 @@ function registerScheduleHandlers(scheduler2) {
 }
 let tray = null;
 function createTray(mainWindow2, queueManager2) {
-  const iconNames = process.platform === "win32" ? ["favicon.ico", "icon.ico"] : ["icon.png", "favicon.png"];
-  const candidates = [];
-  for (const name of iconNames) {
-    candidates.push(
-      path.join(process.resourcesPath, name),
-      path.join(process.resourcesPath, "resources", name),
-      path.join(process.resourcesPath, "app.asar", "resources", name),
-      path.join(__dirname, "../../resources", name),
-      // development
-      path.join(__dirname, "../resources", name)
-      // fallback
-    );
-  }
-  let resolvedIconPath = null;
-  for (const candidate of candidates) {
-    try {
-      if (fs.existsSync(candidate)) {
-        resolvedIconPath = candidate;
-        log.info("[Tray] Found tray icon at: " + candidate);
-        break;
-      }
-    } catch (e) {
-    }
-  }
-  if (!resolvedIconPath) {
-    resolvedIconPath = path.join(process.resourcesPath, iconNames[0]);
-    log.warn("[Tray] No icon found, falling back to: " + resolvedIconPath);
-  }
-  let trayIcon = electron.nativeImage.createFromPath(resolvedIconPath);
+  const iconPath = electron.app.isPackaged ? path.join(process.resourcesPath, "favicon.ico") : path.join(__dirname, "../../resources/favicon.ico");
+  let trayIcon = electron.nativeImage.createFromPath(iconPath);
   if (!trayIcon || trayIcon.isEmpty()) {
-    log.warn("[Tray] Tray icon is empty or failed to load: " + resolvedIconPath);
+    log.warn("[Tray] Tray icon failed to load from: " + iconPath);
     trayIcon = electron.nativeImage.createEmpty();
   } else {
-    log.info("[Tray] Loaded tray icon successfully");
+    trayIcon = trayIcon.resize({ width: 16, height: 16 });
+    log.info("[Tray] Loaded tray icon from: " + iconPath);
   }
   tray = new electron.Tray(trayIcon);
   tray.setToolTip("Download Manager");
@@ -2368,6 +2586,8 @@ function destroyTray() {
   }
 }
 const PIPE_NAME = "\\\\.\\pipe\\idm-clone";
+const MAX_MESSAGE_SIZE = 64 * 1024;
+const CONNECTION_TIMEOUT = 3e4;
 class PipeServer {
   server = null;
   engine;
@@ -2380,9 +2600,19 @@ class PipeServer {
     if (this.server) return;
     this.server = net.createServer((socket) => {
       log.info("[PipeServer] Client connected");
+      socket.setTimeout(CONNECTION_TIMEOUT);
+      socket.on("timeout", () => {
+        log.info("[PipeServer] Client connection timed out");
+        socket.destroy();
+      });
       let buffer = "";
       socket.on("data", (data) => {
         buffer += data.toString("utf-8");
+        if (buffer.length > MAX_MESSAGE_SIZE) {
+          log.warn("[PipeServer] Message too large, closing connection");
+          socket.destroy();
+          return;
+        }
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
         for (const line of lines) {
@@ -2430,6 +2660,14 @@ class PipeServer {
   async handleMessage(raw, socket) {
     try {
       const message = JSON.parse(raw);
+      if (!message.url || typeof message.url !== "string") {
+        throw new Error("Missing or invalid URL");
+      }
+      try {
+        new URL(message.url);
+      } catch {
+        throw new Error(`Invalid URL: ${message.url}`);
+      }
       log.info(`[PipeServer] Received download request: ${message.url}`);
       const item = await this.engine.addDownload({
         url: message.url,
@@ -2557,7 +2795,7 @@ function createWindow() {
       webSecurity: true
     },
     backgroundColor: "#000000",
-    icon: electron.app.isPackaged ? path.join(process.resourcesPath, "resources/favicon.ico") : path.join(__dirname, "../../resources/favicon.ico")
+    icon: electron.app.isPackaged ? path.join(process.resourcesPath, "favicon.ico") : path.join(__dirname, "../../resources/favicon.ico")
   });
   mainWindow.on("ready-to-show", () => {
     mainWindow?.show();
@@ -2589,7 +2827,7 @@ async function initializeApp() {
     fs.mkdirSync(settings.downloadFolder, { recursive: true });
   }
   engine = new DownloadEngine(settings);
-  queueManager = new QueueManager(engine, settings.maxConcurrentDownloads);
+  queueManager = new QueueManager(engine, settings.maxConcurrentDownloads, settings);
   progressTracker = new ProgressTracker(engine);
   scheduler = new Scheduler(engine, queueManager);
   scheduler.initialize();
@@ -2616,15 +2854,6 @@ async function initializeApp() {
         title: "Download Complete",
         body: `${item.filename} has been downloaded successfully.`
       }).show();
-    }
-  });
-  electron.ipcMain.handle(IPC.GET_FILE_ICON, async (_event, filePath) => {
-    try {
-      const icon = await electron.app.getFileIcon(filePath, { size: "large" });
-      return icon.toDataURL();
-    } catch (err) {
-      log.warn("[IPC] get-file-icon failed:", err.message);
-      return null;
     }
   });
   electron.ipcMain.handle(IPC.GET_FAVICON, async (_event, domain) => {
@@ -2701,6 +2930,9 @@ electron.app.on("will-quit", () => {
   scheduler?.destroy();
   destroyTray();
   closeDatabase();
+  const { httpsAgent: httpsAgent2, httpAgent: httpAgent2 } = require("./download-engine/engine");
+  httpsAgent2?.destroy();
+  httpAgent2?.destroy();
 });
 const gotLock = electron.app.requestSingleInstanceLock();
 if (!gotLock) {

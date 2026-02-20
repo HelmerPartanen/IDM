@@ -1,6 +1,25 @@
 import { getDb } from './database';
 import type { DownloadItem, SegmentInfo, ScheduleInfo, DownloadStatus, SegmentStatus, Priority } from '../../shared/types';
 
+// ─── Prepared Statement Cache ────────────────────────────────────────────────
+
+/** Cache of prepared statements for hot-path queries (created lazily). */
+const stmtCache = new Map<string, ReturnType<ReturnType<typeof getDb>['prepare']>>();
+
+function cachedStmt(key: string, sql: string) {
+  let stmt = stmtCache.get(key);
+  if (!stmt) {
+    stmt = getDb().prepare(sql);
+    stmtCache.set(key, stmt);
+  }
+  return stmt;
+}
+
+/** Call when the database is closed / swapped to invalidate cached statements. */
+export function clearStmtCache(): void {
+  stmtCache.clear();
+}
+
 // ─── Download CRUD ───────────────────────────────────────────────────────────
 
 export function insertDownload(item: DownloadItem): void {
@@ -47,26 +66,27 @@ export function updateDownload(id: string, updates: Partial<DownloadItem>): void
 }
 
 export function getDownload(id: string): DownloadItem | undefined {
-  const db = getDb();
-  const row = db.prepare('SELECT * FROM downloads WHERE id = ?').get(id) as any;
+  const row = cachedStmt('getDownload', 'SELECT * FROM downloads WHERE id = ?').get(id) as any;
   return row ? mapRowToDownload(row) : undefined;
 }
 
 export function getAllDownloads(): DownloadItem[] {
-  const db = getDb();
-  const rows = db.prepare('SELECT * FROM downloads ORDER BY created_at DESC').all() as any[];
+  const rows = cachedStmt('getAllDownloads', 'SELECT * FROM downloads ORDER BY created_at DESC').all([]) as any[];
   return rows.map(mapRowToDownload);
 }
 
 export function getDownloadsByStatus(status: DownloadStatus): DownloadItem[] {
-  const db = getDb();
-  const rows = db.prepare('SELECT * FROM downloads WHERE status = ? ORDER BY created_at DESC').all(status) as any[];
+  const rows = cachedStmt('getDownloadsByStatus', 'SELECT * FROM downloads WHERE status = ? ORDER BY created_at DESC').all(status) as any[];
   return rows.map(mapRowToDownload);
 }
 
 export function deleteDownload(id: string): void {
-  const db = getDb();
-  db.prepare('DELETE FROM downloads WHERE id = ?').run(id);
+  cachedStmt('deleteDownload', 'DELETE FROM downloads WHERE id = ?').run(id);
+}
+
+export function clearCompletedDownloads(): number {
+  const result = cachedStmt('clearCompleted', "DELETE FROM downloads WHERE status = 'completed'").run([]);
+  return result.changes;
 }
 
 function mapRowToDownload(row: any): DownloadItem {
@@ -132,14 +152,12 @@ export function updateSegment(downloadId: string, index: number, updates: Partia
 }
 
 export function getSegments(downloadId: string): SegmentInfo[] {
-  const db = getDb();
-  const rows = db.prepare('SELECT * FROM segments WHERE download_id = ? ORDER BY segment_index ASC').all(downloadId) as any[];
+  const rows = cachedStmt('getSegments', 'SELECT * FROM segments WHERE download_id = ? ORDER BY segment_index ASC').all(downloadId) as any[];
   return rows.map(mapRowToSegment);
 }
 
 export function deleteSegments(downloadId: string): void {
-  const db = getDb();
-  db.prepare('DELETE FROM segments WHERE download_id = ?').run(downloadId);
+  cachedStmt('deleteSegments', 'DELETE FROM segments WHERE download_id = ?').run(downloadId);
 }
 
 export function bulkUpdateSegments(downloadId: string, segments: SegmentInfo[]): void {

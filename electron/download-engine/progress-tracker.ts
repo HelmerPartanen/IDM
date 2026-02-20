@@ -6,13 +6,15 @@ import type { DownloadProgressUpdate } from '../../shared/types';
 
 /**
  * Sends batched progress updates from the download engine to the renderer process.
- * Throttled to ~10 Hz (every 100ms) for optimal UI performance.
+ * Dynamically adjusts update frequency based on window visibility.
  */
 export class ProgressTracker {
   private engine: DownloadEngine;
   private mainWindow: BrowserWindow | null = null;
   private intervalId: NodeJS.Timeout | null = null;
-  private updateIntervalMs = 100; // 10 updates per second
+  private activeIntervalMs = 100;    // 10 Hz when window is focused
+  private backgroundIntervalMs = 500; // 2 Hz when minimized / background
+  private isWindowVisible = true;
 
   constructor(engine: DownloadEngine) {
     this.engine = engine;
@@ -20,15 +22,19 @@ export class ProgressTracker {
 
   setWindow(window: BrowserWindow): void {
     this.mainWindow = window;
+
+    // Track visibility for adaptive throttling
+    window.on('show', () => { this.isWindowVisible = true; this.adjustInterval(); });
+    window.on('hide', () => { this.isWindowVisible = false; this.adjustInterval(); });
+    window.on('minimize', () => { this.isWindowVisible = false; this.adjustInterval(); });
+    window.on('restore', () => { this.isWindowVisible = true; this.adjustInterval(); });
+    window.on('focus', () => { this.isWindowVisible = true; this.adjustInterval(); });
+    window.on('blur', () => { /* keep rate — user may have overlay */ });
   }
 
   start(): void {
     if (this.intervalId) return;
-
-    this.intervalId = setInterval(() => {
-      this.sendProgressBatch();
-    }, this.updateIntervalMs);
-
+    this.scheduleInterval(this.activeIntervalMs);
     log.info('[ProgressTracker] Started progress tracking');
   }
 
@@ -37,6 +43,20 @@ export class ProgressTracker {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
+  }
+
+  private adjustInterval(): void {
+    if (!this.intervalId) return;
+    const desiredMs = this.isWindowVisible ? this.activeIntervalMs : this.backgroundIntervalMs;
+    // Re-schedule at new rate
+    clearInterval(this.intervalId);
+    this.scheduleInterval(desiredMs);
+  }
+
+  private scheduleInterval(ms: number): void {
+    this.intervalId = setInterval(() => {
+      this.sendProgressBatch();
+    }, ms);
   }
 
   private sendProgressBatch(): void {

@@ -5,6 +5,8 @@ import { QueueManager } from '../download-engine/queue-manager';
 import type { NativeMessage } from '../../shared/types';
 
 const PIPE_NAME = '\\\\.\\pipe\\idm-clone';
+const MAX_MESSAGE_SIZE = 64 * 1024;   // 64 KB max per message
+const CONNECTION_TIMEOUT = 30000;      // 30 seconds idle timeout
 
 /**
  * Named pipe server that receives download requests from the native messaging host.
@@ -26,10 +28,24 @@ export class PipeServer {
     this.server = net.createServer((socket) => {
       log.info('[PipeServer] Client connected');
 
+      // Set idle timeout so stale connections don't leak
+      socket.setTimeout(CONNECTION_TIMEOUT);
+      socket.on('timeout', () => {
+        log.info('[PipeServer] Client connection timed out');
+        socket.destroy();
+      });
+
       let buffer = '';
 
       socket.on('data', (data) => {
         buffer += data.toString('utf-8');
+
+        // Guard against oversized messages
+        if (buffer.length > MAX_MESSAGE_SIZE) {
+          log.warn('[PipeServer] Message too large, closing connection');
+          socket.destroy();
+          return;
+        }
 
         // Try to parse complete JSON messages (newline-delimited)
         const lines = buffer.split('\n');
@@ -90,6 +106,19 @@ export class PipeServer {
   private async handleMessage(raw: string, socket: net.Socket): Promise<void> {
     try {
       const message: NativeMessage = JSON.parse(raw);
+
+      // Validate required fields
+      if (!message.url || typeof message.url !== 'string') {
+        throw new Error('Missing or invalid URL');
+      }
+
+      // Basic URL validation
+      try {
+        new URL(message.url);
+      } catch {
+        throw new Error(`Invalid URL: ${message.url}`);
+      }
+
       log.info(`[PipeServer] Received download request: ${message.url}`);
 
       // Add the download
