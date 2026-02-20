@@ -12,9 +12,22 @@
 
 import * as net from 'net';
 import * as path from 'path';
+import * as fs from 'fs';
 import { execFile } from 'child_process';
 
 const PIPE_NAME = '\\\\.\\pipe\\idm-clone';
+const LOG_FILE = path.join(process.env.LOCALAPPDATA || '', 'idm-clone-host.log');
+
+function log(message: string): void {
+  const timestamp = new Date().toISOString();
+  const entry = `[${timestamp}] ${message}\n`;
+  try {
+    fs.appendFileSync(LOG_FILE, entry);
+  } catch {
+    // Ignore logging errors
+  }
+}
+log('Native host started');
 
 // ─── Native Messaging Protocol ───────────────────────────────────────────────
 
@@ -108,8 +121,10 @@ function sendToPipe(message: object): Promise<any> {
     client.on('error', (err: any) => {
       if (err.code === 'ENOENT' || err.code === 'ECONNREFUSED') {
         // IDM Clone app is not running — try to launch it
+        log('Named pipe connection refused - app might not be running');
         reject(new Error('IDM Clone is not running'));
       } else {
+        log(`Pipe connection error: ${err.message}`);
         reject(err);
       }
     });
@@ -117,6 +132,7 @@ function sendToPipe(message: object): Promise<any> {
     // Timeout after 10 seconds
     client.setTimeout(10000, () => {
       client.destroy();
+      log('Pipe connection timeout');
       reject(new Error('Pipe connection timeout'));
     });
   });
@@ -128,21 +144,27 @@ function sendToPipe(message: object): Promise<any> {
 function launchElectronApp(): void {
   // Look for the app in common locations
   const possiblePaths = [
-    path.join(process.env.LOCALAPPDATA || '', 'Programs', 'idm-clone', 'IDM Clone.exe'),
-    path.join(process.env.PROGRAMFILES || '', 'IDM Clone', 'IDM Clone.exe'),
-    path.join(__dirname, '..', 'IDM Clone.exe'),
-    path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Download Manager', 'Download Manager.exe'),
-    path.join(process.env.PROGRAMFILES || '', 'Download Manager', 'Download Manager.exe')
+    path.join(process.env.LOCALAPPDATA || '', 'Programs', 'download-manager', 'Download Manager.exe'),
+    path.join(process.env.PROGRAMFILES || '', 'Download Manager', 'Download Manager.exe'),
+    path.join(path.dirname(process.execPath), 'Download Manager.exe'),
+    path.join(path.dirname(process.execPath), '..', 'Download Manager.exe'),
+    path.join(path.dirname(process.execPath), '..', '..', 'Download Manager.exe')
   ];
 
+  log(`Searching for Electron app in ${possiblePaths.length} locations...`);
+
   for (const appPath of possiblePaths) {
-    try {
-      execFile(appPath, { detached: true, stdio: 'ignore' } as any);
-      return;
-    } catch {
-      // Try next path
+    if (fs.existsSync(appPath)) {
+      try {
+        log(`Launching Electron app at: ${appPath}`);
+        execFile(appPath, { detached: true, stdio: 'ignore' } as any).unref();
+        return;
+      } catch (err: any) {
+        log(`Failed to launch ${appPath}: ${err.message}`);
+      }
     }
   }
+  log('Could not find Electron app executable');
 }
 
 // ─── Main Loop ───────────────────────────────────────────────────────────────
@@ -155,6 +177,12 @@ async function main(): Promise<void> {
   while (true) {
     try {
       const message = await readMessage();
+
+      // Handle PING message for connection testing
+      if (message.type === 'PING') {
+        writeMessage({ success: true, status: 'pong' });
+        continue;
+      }
 
       try {
         const response = await sendToPipe(message);

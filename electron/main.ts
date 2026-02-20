@@ -46,7 +46,9 @@ function createWindow(): BrowserWindow {
       webSecurity: true
     },
     backgroundColor: '#000000',
-    icon: join(__dirname, '../../resources/favicon.ico')
+    icon: app.isPackaged
+      ? join(process.resourcesPath, 'resources/favicon.ico')
+      : join(__dirname, '../../resources/favicon.ico')
   });
 
   mainWindow.on('ready-to-show', () => {

@@ -12,6 +12,7 @@ const events = require("events");
 const uuid = require("uuid");
 const Store = require("electron-store");
 const net = require("net");
+const child_process = require("child_process");
 let db = null;
 function getDbPath() {
   const userDataPath = electron.app.getPath("userData");
@@ -1107,7 +1108,7 @@ const DEFAULT_SETTINGS = {
   downloadFolder: "",
   maxThreadsPerDownload: 8,
   maxConcurrentDownloads: 3,
-  autoStartOnBoot: false,
+  autoStartOnBoot: true,
   speedLimitEnabled: false,
   speedLimitBytesPerSec: 0,
   minimizeToTray: true,
@@ -2442,6 +2443,73 @@ class PipeServer {
     }
   }
 }
+async function runSetup() {
+  const isDev = !electron.app.isPackaged;
+  try {
+    const appPath = electron.app.getPath("exe");
+    const appDir = path.dirname(appPath);
+    let resourcesDir;
+    if (isDev) {
+      resourcesDir = path.join(process.cwd());
+    } else {
+      resourcesDir = path.join(appDir, "resources");
+    }
+    log.info(`[Setup] Detected resources directory: ${resourcesDir}`);
+    const manifestPath = isDev ? path.join(resourcesDir, "native-host", "com.idm.clone.json") : path.join(resourcesDir, "native-host", "com.idm.clone.json");
+    const hostExePath = isDev ? path.join(resourcesDir, "native-host", "dist", "idm-native-host.exe") : path.join(resourcesDir, "native-host", "idm-native-host.exe");
+    if (fs.existsSync(manifestPath)) {
+      try {
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+        if (manifest.path !== hostExePath) {
+          manifest.path = hostExePath;
+          fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+          log.info("[Setup] Updated native messaging manifest path:", hostExePath);
+        }
+      } catch (e) {
+        log.error("[Setup] Failed to parse/write manifest:", e.message);
+      }
+    } else {
+      log.warn("[Setup] Native messaging manifest not found at:", manifestPath);
+    }
+    if (fs.existsSync(manifestPath)) {
+      const registryPaths = [
+        "HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\com.idm.clone",
+        "HKCU\\Software\\Microsoft\\Edge\\NativeMessagingHosts\\com.idm.clone"
+      ];
+      for (const regPath of registryPaths) {
+        try {
+          let alreadyRegistered = false;
+          try {
+            const currentReg = child_process.execSync(`reg query "${regPath}" /ve`).toString();
+            if (currentReg.includes(manifestPath)) {
+              alreadyRegistered = true;
+            }
+          } catch {
+          }
+          if (!alreadyRegistered) {
+            child_process.execSync(`reg add "${regPath}" /ve /t REG_SZ /d "${manifestPath}" /f`);
+            log.info(`[Setup] Registered native host at ${regPath}`);
+          }
+        } catch (err) {
+          log.error(`[Setup] Failed to register native host at ${regPath}:`, err.message);
+        }
+      }
+    }
+    const settings = getSettings();
+    if (settings.autoStartOnBoot && !isDev) {
+      const loginSettings = electron.app.getLoginItemSettings();
+      if (!loginSettings.openAtLogin) {
+        electron.app.setLoginItemSettings({
+          openAtLogin: true,
+          path: appPath
+        });
+        log.info("[Setup] Enabled auto-start at login");
+      }
+    }
+  } catch (error) {
+    log.error("[Setup] Automatic setup failed:", error.message);
+  }
+}
 let mainWindow = null;
 let engine;
 let progressTracker;
@@ -2496,6 +2564,7 @@ function createWindow() {
 async function initializeApp() {
   initDatabase();
   const settings = getSettings();
+  await runSetup();
   if (!fs.existsSync(settings.downloadFolder)) {
     fs.mkdirSync(settings.downloadFolder, { recursive: true });
   }

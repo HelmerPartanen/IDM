@@ -75,11 +75,32 @@ function connectNative() {
     });
 
     console.log('[IDM Clone] Connected to native host');
+
+    // Perform initial ping
+    nativePort.postMessage({ type: 'PING' });
+
     return nativePort;
   } catch (err) {
     console.error('[IDM Clone] Failed to connect to native host:', err);
     nativePort = null;
     return null;
+  }
+}
+
+/**
+ * Perform a one-shot ping to verify host is alive
+ */
+function checkConnection(callback) {
+  try {
+    chrome.runtime.sendNativeMessage(NATIVE_HOST_NAME, { type: 'PING' }, (response) => {
+      if (chrome.runtime.lastError || !response || response.status !== 'pong') {
+        callback(false);
+      } else {
+        callback(true);
+      }
+    });
+  } catch {
+    callback(false);
   }
 }
 
@@ -277,11 +298,19 @@ function showNotification(title, message) {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   switch (message.type) {
+    case 'TEST_CONNECTION':
+      checkConnection((connected) => {
+        sendResponse({ connected });
+      });
+      break;
+
     case 'GET_STATUS':
-      sendResponse({
-        enabled: settings.enabled,
-        connected: nativePort !== null,
-        recentDownloads: recentDownloads.slice(0, 10)
+      checkConnection((connected) => {
+        sendResponse({
+          enabled: settings.enabled,
+          connected: connected,
+          recentDownloads: recentDownloads.slice(0, 10)
+        });
       });
       break;
 

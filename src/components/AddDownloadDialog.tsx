@@ -181,7 +181,7 @@ export function AddDownloadDialog() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2 bg-accent hover:bg-accent-hover text-white text-[13px] font-semibold
+              className="px-5 py-2 bg-accent hover:bg-accent-hover text-black text-[13px] font-semibold
                 rounded-xl transition-apple shadow-glass-sm active:scale-[0.97]
                 disabled:opacity-50 disabled:cursor-not-allowed
                 flex items-center gap-2"

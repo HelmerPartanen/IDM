@@ -32,12 +32,12 @@ files:
   - '!node_modules/*/test{,s}/**'
   - '!node_modules/*/docs/**'
 extraResources:
-  - from: native-host/dist/
-    to: native-host/
+  - from: native-host/
+    to: native-host
     filter:
       - '**/*'
   - from: extension/
-    to: extension/
+    to: extension
     filter:
     - '!node_modules/electron/**'
     - '!node_modules/electron-builder/**'

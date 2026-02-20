@@ -12,6 +12,7 @@
     "package": "electron-builder --win",
     "build:extension": "cd extension && npm run build",
     "build:native-host": "cd native-host && npx esbuild host.ts --bundle --platform=node --target=node18 --outfile=dist/host.js",
+    "build:native-host-exe": "cd native-host && npx pkg dist/host.js --targets node18-win-x64 --output idm-native-host.exe",
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
@@ -46,21 +47,33 @@
     "postcss": "^8.4.0",
     "tailwindcss": "^3.4.0",
     "typescript": "^5.5.0"
-  }
-  ,
+  },
   "build": {
+    "appId": "com.idm.clone",
+    "productName": "Download Manager",
+    "directories": {
+      "buildResources": "resources",
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "resources/favicon.ico"
+    },
     "extraResources": [
       {
         "from": "native-host/",
         "to": "native-host",
-        "filter": ["**/*"]
+        "filter": [
+          "idm-native-host.exe",
+          "com.idm.clone.json"
+        ]
       }
     ],
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowElevation": true,
-      "include": "build/installer.nsh"
+      "include": "resources/installer.nsh"
     }
   }
 }
