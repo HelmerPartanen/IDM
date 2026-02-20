@@ -1,10 +1,9 @@
 import React from 'react';
 import {
   LayoutList, ArrowDownToLine, CheckCircle2, Pause, Clock,
-  AlertCircle, ArrowDown
+  AlertCircle
 } from 'lucide-react';
 import { useDownloadStore, FilterCategory } from '../store/useDownloadStore';
-import { formatSpeed } from '../utils/format';
 
 const categories: { key: FilterCategory; label: string; icon: React.ReactNode }[] = [
   { key: 'all', label: 'All Downloads', icon: <LayoutList size={16} /> },
@@ -19,7 +18,6 @@ export function Sidebar() {
   const filter = useDownloadStore(s => s.filter);
   const setFilter = useDownloadStore(s => s.setFilter);
   const getCounts = useDownloadStore(s => s.getCounts);
-  const globalSpeed = useDownloadStore(s => s.globalSpeed);
 
   const counts = getCounts();
 
@@ -33,12 +31,6 @@ export function Sidebar() {
           </div>
           <div>
             <p className="text-[13px] font-bold text-label-primary tracking-tight leading-none font-display">Download Manager</p>
-            {globalSpeed > 0 && (
-              <p className="text-[10px] text-accent font-bold mt-1.5 flex items-center gap-1 uppercase tracking-wider">
-                <ArrowDown size={10} strokeWidth={3} />
-                {formatSpeed(globalSpeed)}
-              </p>
-            )}
           </div>
         </div>
       </div>
