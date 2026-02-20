@@ -34,7 +34,7 @@ export function Sidebar() {
           </div>
           <div>
             <h1 className="text-[13px] font-semibold text-label-primary tracking-tight leading-none">
-              Velocity
+              Download Manager
             </h1>
             {globalSpeed > 0 ? (
               <p className="text-[11px] text-accent font-medium mt-0.5 flex items-center gap-1">
