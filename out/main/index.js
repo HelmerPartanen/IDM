@@ -1182,7 +1182,9 @@ const IPC = {
   APP_QUIT: "app:quit",
   SCHEDULE_ADD: "schedule:add",
   SCHEDULE_REMOVE: "schedule:remove",
-  SCHEDULE_LIST: "schedule:list"
+  SCHEDULE_LIST: "schedule:list",
+  GET_FILE_ICON: "app:get-file-icon",
+  GET_FAVICON: "app:get-favicon"
 };
 class ProgressTracker {
   engine;
@@ -2614,6 +2616,48 @@ async function initializeApp() {
         title: "Download Complete",
         body: `${item.filename} has been downloaded successfully.`
       }).show();
+    }
+  });
+  electron.ipcMain.handle(IPC.GET_FILE_ICON, async (_event, filePath) => {
+    try {
+      const icon = await electron.app.getFileIcon(filePath, { size: "large" });
+      return icon.toDataURL();
+    } catch (err) {
+      log.warn("[IPC] get-file-icon failed:", err.message);
+      return null;
+    }
+  });
+  electron.ipcMain.handle(IPC.GET_FAVICON, async (_event, domain) => {
+    try {
+      const url = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`;
+      const { net: net2 } = require("electron");
+      return new Promise((resolve) => {
+        const request = net2.request(url);
+        const chunks = [];
+        request.on("response", (response) => {
+          response.on("data", (chunk) => chunks.push(chunk));
+          response.on("end", () => {
+            try {
+              const buffer = Buffer.concat(chunks);
+              if (buffer.length < 100) {
+                resolve(null);
+                return;
+              }
+              const contentType = response.headers["content-type"];
+              const mime = Array.isArray(contentType) ? contentType[0] : contentType || "image/png";
+              const b64 = buffer.toString("base64");
+              resolve(`data:${mime};base64,${b64}`);
+            } catch {
+              resolve(null);
+            }
+          });
+        });
+        request.on("error", () => resolve(null));
+        request.end();
+      });
+    } catch (err) {
+      log.warn("[IPC] get-favicon failed:", err.message);
+      return null;
     }
   });
   electron.ipcMain.on(IPC.APP_MINIMIZE_TO_TRAY, () => {

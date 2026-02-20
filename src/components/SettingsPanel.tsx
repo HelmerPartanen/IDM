@@ -61,7 +61,7 @@ export function SettingsPanel() {
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 flex-shrink-0">
-          <h2 className="text-[15px] font-semibold text-label-primary">Settings</h2>
+          <h2 className="text-[15px] font-bold text-label-primary font-display">Settings</h2>
           <button onClick={() => setShowSettings(false)}
             className="p-1 rounded-lg text-label-tertiary hover:text-label-primary hover:bg-surface-glass-hover transition-apple">
             <X size={16} />
@@ -206,7 +206,7 @@ export function SettingsPanel() {
 function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h3 className="flex items-center gap-2 text-[11px] font-semibold text-label-quaternary uppercase tracking-widest mb-3">
+      <h3 className="flex items-center gap-2 text-[11px] font-semibold text-label-quaternary uppercase tracking-widest mb-3 font-display">
         {icon}
         {title}
       </h3>

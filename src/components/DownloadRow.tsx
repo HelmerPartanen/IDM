@@ -1,7 +1,6 @@
 import React from 'react';
 import {
-  Pause, Play, RotateCcw, FolderOpen, FileText, X, Trash2,
-  Archive, AppWindow, Video, Music, Image, Disc, File,
+  Pause, Play, RotateCcw, FolderOpen, X, Trash2,
   ArrowDownToLine
 } from 'lucide-react';
 import type { DownloadItem } from '../../shared/types';
@@ -11,17 +10,9 @@ import {
   formatBytes, formatSpeed, formatEta, getProgress,
   getFileTypeInfo, getStatusDisplay
 } from '../utils/format';
+import { FileIcon } from './FileIcon';
 
-const fileIcons: Record<string, React.ReactNode> = {
-  archive: <Archive size={16} />,
-  app: <AppWindow size={16} />,
-  doc: <FileText size={16} />,
-  video: <Video size={16} />,
-  audio: <Music size={16} />,
-  image: <Image size={16} />,
-  disc: <Disc size={16} />,
-  file: <File size={16} />,
-};
+
 
 interface DownloadRowProps {
   item: DownloadItem;
@@ -47,10 +38,9 @@ export function DownloadRow({ item, style }: DownloadRowProps) {
     <div
       style={style}
       className={`
-        group flex items-center px-4 py-3 transition-apple cursor-pointer
-        border-b border-surface-glass-border/50
+        group flex items-center px-4 py-3 mx-2 my-1 rounded-xl transition-apple cursor-pointer
         ${isSelected
-          ? 'bg-accent-subtle'
+          ? 'bg-surface-3'
           : 'hover:bg-surface-glass-hover'
         }
       `}
@@ -58,10 +48,8 @@ export function DownloadRow({ item, style }: DownloadRowProps) {
       onDoubleClick={() => isCompleted && openFile(item.id)}
     >
       {/* File type icon */}
-      <div className={`w-9 h-9 rounded-xl ${fileType.bgColor} flex items-center justify-center flex-shrink-0 mr-3`}>
-        <span className={fileType.color}>
-          {fileIcons[fileType.icon] || <File size={16} />}
-        </span>
+      <div className="w-6 h-6 rounded-xl flex items-center justify-center flex-shrink-0 mr-3">
+        <FileIcon filename={item.filename} url={item.url} size={36} />
       </div>
 
       {/* File info */}

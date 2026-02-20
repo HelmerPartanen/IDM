@@ -32,7 +32,7 @@ export function Sidebar() {
             <img src="./favicon.ico" alt="" className="w-8 h-8" draggable={false} />
           </div>
           <div>
-            <p className="text-[13px] font-bold text-label-primary tracking-tight leading-none">Download Manager</p>
+            <p className="text-[13px] font-bold text-label-primary tracking-tight leading-none font-display">Download Manager</p>
             {globalSpeed > 0 && (
               <p className="text-[10px] text-accent font-bold mt-1.5 flex items-center gap-1 uppercase tracking-wider">
                 <ArrowDown size={10} strokeWidth={3} />
@@ -100,7 +100,7 @@ function SidebarItem({
         <span className={`${isActive ? 'text-accent' : 'text-label-tertiary group-hover:text-label-secondary'} transition-apple`}>
           {icon}
         </span>
-        <span className="font-semibold tracking-tight">{label}</span>
+        <span className="font-semibold tracking-tight font-display">{label}</span>
       </span>
       {isNew && !isActive && (
         <span className="px-1.5 py-0.5 rounded-md bg-accent text-black text-[9px] font-black uppercase">New</span>

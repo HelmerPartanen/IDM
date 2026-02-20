@@ -21,7 +21,9 @@ const IPC = {
   APP_QUIT: "app:quit",
   SCHEDULE_ADD: "schedule:add",
   SCHEDULE_REMOVE: "schedule:remove",
-  SCHEDULE_LIST: "schedule:list"
+  SCHEDULE_LIST: "schedule:list",
+  GET_FILE_ICON: "app:get-file-icon",
+  GET_FAVICON: "app:get-favicon"
 };
 const api = {
   // Downloads
@@ -45,6 +47,9 @@ const api = {
   addSchedule: (schedule) => electron.ipcRenderer.invoke(IPC.SCHEDULE_ADD, schedule),
   removeSchedule: (id) => electron.ipcRenderer.invoke(IPC.SCHEDULE_REMOVE, id),
   listSchedules: () => electron.ipcRenderer.invoke(IPC.SCHEDULE_LIST),
+  // File icons
+  getFileIcon: (filePath) => electron.ipcRenderer.invoke(IPC.GET_FILE_ICON, filePath),
+  getFavicon: (domain) => electron.ipcRenderer.invoke(IPC.GET_FAVICON, domain),
   // Events from main process
   onProgressBatch: (callback) => {
     const handler = (_event, updates) => callback(updates);

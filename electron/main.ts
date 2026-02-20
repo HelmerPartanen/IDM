@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeImage, shell } from 'electron';
 import { join } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import log from 'electron-log';
@@ -140,6 +140,54 @@ async function initializeApp(): Promise<void> {
         title: 'Download Complete',
         body: `${item.filename} has been downloaded successfully.`
       }).show();
+    }
+  });
+
+  // File icon IPC — returns a data URL of the system icon for a file path/extension
+  ipcMain.handle(IPC.GET_FILE_ICON, async (_event, filePath: string) => {
+    try {
+      const icon = await app.getFileIcon(filePath, { size: 'large' });
+      return icon.toDataURL();
+    } catch (err: any) {
+      log.warn('[IPC] get-file-icon failed:', err.message);
+      return null;
+    }
+  });
+
+  // Favicon IPC — fetches a website's favicon and returns it as a data URL
+  ipcMain.handle(IPC.GET_FAVICON, async (_event, domain: string) => {
+    try {
+      // Use Google's high-quality favicon service
+      const url = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`;
+      const { net } = require('electron') as typeof import('electron');
+      return new Promise<string | null>((resolve) => {
+        const request = net.request(url);
+        const chunks: Buffer[] = [];
+        request.on('response', (response) => {
+          response.on('data', (chunk: Buffer) => chunks.push(chunk));
+          response.on('end', () => {
+            try {
+              const buffer = Buffer.concat(chunks);
+              // Check we got a real image (not a tiny 1x1 default)
+              if (buffer.length < 100) {
+                resolve(null);
+                return;
+              }
+              const contentType = response.headers['content-type'];
+              const mime = Array.isArray(contentType) ? contentType[0] : contentType || 'image/png';
+              const b64 = buffer.toString('base64');
+              resolve(`data:${mime};base64,${b64}`);
+            } catch {
+              resolve(null);
+            }
+          });
+        });
+        request.on('error', () => resolve(null));
+        request.end();
+      });
+    } catch (err: any) {
+      log.warn('[IPC] get-favicon failed:', err.message);
+      return null;
     }
   });
 

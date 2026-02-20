@@ -84,7 +84,7 @@ export function ScheduleDialog() {
         onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4">
-          <h2 className="text-[15px] font-semibold text-label-primary">Schedule Download</h2>
+          <h2 className="text-[15px] font-bold text-label-primary font-display">Schedule Download</h2>
           <button onClick={handleClose}
             className="p-1 rounded-lg text-label-tertiary hover:text-label-primary hover:bg-surface-glass-hover transition-apple">
             <X size={16} />

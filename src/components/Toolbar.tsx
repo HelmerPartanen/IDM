@@ -39,12 +39,12 @@ export function Toolbar() {
   };
 
   return (
-    <div className="h-[41px] pl-4 pr-[140px] flex items-center gap-2 border-b border-surface-3">
+    <div className="h-[41px] pl-4 pr-[140px] flex items-center gap-2">
       {/* Add button — primary CTA */}
       <button
         onClick={() => setShowAddDialog(true)}
         className="flex items-center gap-1.5 bg-accent hover:bg-accent-hover active:scale-[0.97]
-          text-black pl-2.5 pr-3.5 py-[5px] rounded-lg text-[13px] font-semibold
+          text-black pl-2.5 pr-3.5 py-[5px] rounded-xl text-[13px] font-semibold
           transition-apple shadow-glass-sm"
       >
         <Plus size={15} strokeWidth={2.5} />

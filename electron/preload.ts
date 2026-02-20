@@ -32,6 +32,10 @@ export interface ElectronAPI {
   removeSchedule: (id: number) => Promise<{ success: boolean; error?: string }>;
   listSchedules: () => Promise<{ success: boolean; schedules?: ScheduleInfo[]; error?: string }>;
 
+  // File icons
+  getFileIcon: (filePath: string) => Promise<string | null>;
+  getFavicon: (domain: string) => Promise<string | null>;
+
   // Events
   onProgressBatch: (callback: (updates: DownloadProgressUpdate[]) => void) => () => void;
   onDownloadAdded: (callback: (item: DownloadItem) => void) => () => void;
@@ -68,6 +72,10 @@ const api: ElectronAPI = {
   addSchedule: (schedule) => ipcRenderer.invoke(IPC.SCHEDULE_ADD, schedule),
   removeSchedule: (id) => ipcRenderer.invoke(IPC.SCHEDULE_REMOVE, id),
   listSchedules: () => ipcRenderer.invoke(IPC.SCHEDULE_LIST),
+
+  // File icons
+  getFileIcon: (filePath) => ipcRenderer.invoke(IPC.GET_FILE_ICON, filePath),
+  getFavicon: (domain) => ipcRenderer.invoke(IPC.GET_FAVICON, domain),
 
   // Events from main process
   onProgressBatch: (callback) => {

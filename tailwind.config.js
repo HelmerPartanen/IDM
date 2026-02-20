@@ -44,7 +44,8 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Display"', '"SF Pro Text"', '"Segoe UI"', '"Helvetica Neue"', 'Arial', 'sans-serif'],
+        sans: ['"DM Sans Variable"', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'sans-serif'],
+        display: ['"Syne"', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'sans-serif'],
       },
       borderRadius: {
         '2xl': '16px',
