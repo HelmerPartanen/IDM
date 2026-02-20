@@ -2444,8 +2444,8 @@ function createWindow() {
       nodeIntegration: false,
       webSecurity: true
     },
-    backgroundColor: "#1a1b2e",
-    icon: path.join(__dirname, "../../resources/icon.png")
+    backgroundColor: "#000000",
+    icon: path.join(__dirname, "../../resources/favicon.ico")
   });
   mainWindow.on("ready-to-show", () => {
     mainWindow?.show();

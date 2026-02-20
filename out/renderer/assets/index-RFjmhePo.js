@@ -8003,13 +8003,13 @@ function Sidebar() {
   const counts = getCounts();
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "w-[220px] bg-surface-1/80 backdrop-blur-glass border-r border-surface-glass-border flex flex-col h-full", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "px-5 pt-5 pb-4 drag-region", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "no-drag flex items-center gap-2.5", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-8 h-8 rounded-xl bg-accent/15 flex items-center justify-center shadow-inner-light", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Zap, { size: 16, className: "text-accent" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "/favicon.ico", alt: "", className: "w-7 h-7", draggable: false }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-[13px] font-semibold text-label-primary tracking-tight leading-none", children: "Velocity" }),
-        globalSpeed > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] text-accent font-medium mt-0.5 flex items-center gap-1", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[13px] font-semibold text-label-primary tracking-tight leading-none", children: "Download Manager" }),
+        globalSpeed > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-[11px] text-accent font-medium mt-1 flex items-center gap-1", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(ArrowDown, { size: 10 }),
           formatSpeed(globalSpeed)
-        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-[11px] text-label-quaternary mt-0.5", children: "Download Manager" })
+        ] })
       ] })
     ] }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { className: "flex-1 px-3 py-1 overflow-y-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-0.5", children: categories.map((cat) => {
@@ -8149,7 +8149,7 @@ function Toolbar() {
       "button",
       {
         onClick: () => setShowAddDialog(true),
-        className: "flex items-center gap-1.5 bg-accent hover:bg-accent-hover active:scale-[0.97]\r\n          text-white pl-2.5 pr-3.5 py-[6px] rounded-lg text-[13px] font-semibold\r\n          transition-apple shadow-glass-sm",
+        className: "flex items-center gap-1.5 bg-accent hover:bg-accent-hover active:scale-[0.97]\r\n          text-black pl-2.5 pr-3.5 py-[6px] rounded-lg text-[13px] font-semibold\r\n          transition-apple shadow-glass-sm",
         children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(Plus, { size: 15, strokeWidth: 2.5 }),
           "Add URL"
@@ -8241,7 +8241,7 @@ function ToolbarButton({
     {
       onClick,
       disabled,
-      className: "flex items-center gap-1.5 text-[13px] text-label-secondary\r\n        hover:text-label-primary disabled:text-label-quaternary\r\n        disabled:cursor-not-allowed px-2.5 py-[5px] rounded-lg\r\n        hover:bg-surface-glass-hover active:bg-surface-glass-active\r\n        active:scale-[0.97] transition-apple",
+      className: "flex items-center gap-1.5 text-[13px] font-medium text-label-secondary\r\n        hover:text-label-primary disabled:text-label-quaternary\r\n        disabled:cursor-not-allowed px-2.5 py-[5px] rounded-lg\r\n        hover:bg-surface-glass-hover active:bg-surface-glass-active\r\n        active:scale-[0.97] transition-apple",
       title: label,
       children: [
         icon,
@@ -9766,7 +9766,7 @@ function SettingsPanel() {
                 {
                   onClick: handleSave,
                   disabled: saving,
-                  className: "px-5 py-2 bg-accent hover:bg-accent-hover text-white text-[13px] font-semibold\r\n                rounded-xl transition-apple shadow-glass-sm active:scale-[0.97]\r\n                disabled:opacity-50 flex items-center gap-2",
+                  className: "px-5 py-2 bg-accent hover:bg-accent-hover text-black text-[13px] font-semibold\r\n                rounded-xl transition-apple shadow-glass-sm active:scale-[0.97]\r\n                disabled:opacity-50 flex items-center gap-2",
                   children: [
                     saving && /* @__PURE__ */ jsxRuntimeExports.jsx(LoaderCircle, { size: 14, className: "animate-spin" }),
                     saving ? "Saving…" : "Save"
@@ -9796,7 +9796,7 @@ function Toggle({ checked, onChange }) {
       onClick: () => onChange(!checked),
       className: `
         relative inline-flex h-[22px] w-[40px] items-center rounded-full transition-all duration-300 ease-apple flex-shrink-0
-        ${checked ? "bg-accent" : "bg-surface-5"}
+        ${checked ? "bg-accent-subtle" : "bg-surface-5"}
       `,
       children: /* @__PURE__ */ jsxRuntimeExports.jsx(
         "span",

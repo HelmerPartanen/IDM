@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "IDM Clone - Download Interceptor",
+  "name": "Download Manager - Download Interceptor",
   "version": "1.0.0",
-  "description": "Intercepts browser downloads and redirects them to IDM Clone for accelerated multi-threaded downloading.",
+  "description": "Intercepts browser downloads and redirects them to Download Manager for accelerated multi-threaded downloading.",
   "permissions": [
     "downloads",
     "nativeMessaging",

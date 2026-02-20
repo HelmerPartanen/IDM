@@ -29,20 +29,14 @@ export function Sidebar() {
       {/* Brand */}
       <div className="px-5 pt-5 pb-4 drag-region">
         <div className="no-drag flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-accent/15 flex items-center justify-center shadow-inner-light">
-            <Zap size={16} className="text-accent" />
-          </div>
+          <img src="/favicon.ico" alt="" className="w-7 h-7" draggable={false} />
           <div>
-            <h1 className="text-[13px] font-semibold text-label-primary tracking-tight leading-none">
-              Download Manager
-            </h1>
-            {globalSpeed > 0 ? (
-              <p className="text-[11px] text-accent font-medium mt-0.5 flex items-center gap-1">
+            <p className="text-[13px] font-semibold text-label-primary tracking-tight leading-none">Download Manager</p>
+            {globalSpeed > 0 && (
+              <p className="text-[11px] text-accent font-medium mt-1 flex items-center gap-1">
                 <ArrowDown size={10} />
                 {formatSpeed(globalSpeed)}
               </p>
-            ) : (
-              <p className="text-[11px] text-label-quaternary mt-0.5">Download Manager</p>
             )}
           </div>
         </div>

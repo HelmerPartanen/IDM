@@ -1,6 +1,6 @@
-appId: com.idm.clone
-productName: IDM Clone
-copyright: Copyright © 2026 IDM Clone
+appId: com.download.manager
+productName: Download Manager
+copyright: Copyright © 2026
 directories:
   buildResources: resources
   output: dist
@@ -9,17 +9,17 @@ win:
     - target: nsis
       arch:
         - x64
-  icon: resources/icon.ico
+  icon: resources/favicon.ico
 nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-  installerIcon: resources/icon.ico
-  uninstallerIcon: resources/icon.ico
-  installerHeaderIcon: resources/icon.ico
+  installerIcon: resources/favicon.ico
+  uninstallerIcon: resources/favicon.ico
+  installerHeaderIcon: resources/favicon.ico
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: IDM Clone
+  shortcutName: Download Manager
   include: resources/installer.nsh
 files:
   - out/**/*
@@ -30,3 +30,8 @@ extraResources:
     to: native-host/
     filter:
       - '**/*'
+  - from: extension/
+    to: extension/
+    filter:
+      - '**/*'
+      - '!node_modules/**'

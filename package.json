@@ -1,9 +1,9 @@
 {
-  "name": "idm-clone",
+  "name": "download-manager",
   "version": "1.0.0",
-  "description": "Internet Download Manager Clone - Multi-threaded download manager with Chrome extension",
+  "description": "Multi-threaded download manager with Chrome extension integration",
   "main": "out/main/index.js",
-  "author": "IDM Clone",
+  "author": "Download Manager",
   "license": "MIT",
   "scripts": {
     "dev": "electron-vite dev",
@@ -11,7 +11,7 @@
     "preview": "electron-vite preview",
     "package": "electron-builder --win",
     "build:extension": "cd extension && npm run build",
-    "build:native-host": "cd native-host && npx tsc && npx pkg dist/host.js --targets node18-win-x64 --output dist/idm-native-host.exe",
+    "build:native-host": "cd native-host && npx esbuild host.ts --bundle --platform=node --target=node18 --outfile=dist/host.js",
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
