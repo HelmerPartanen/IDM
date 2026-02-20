@@ -1,7 +1,7 @@
 {
   "name": "com.idm.clone",
   "description": "IDM Clone Native Messaging Host",
-  "path": "REPLACE_WITH_ACTUAL_PATH",
+  "path": "C:\\Users\\Hemppu\\Desktop\\IDM\\native-host\\idm-native-host.exe",
   "type": "stdio",
   "allowed_origins": [
     "chrome-extension://mdnmefkheanigejjechigdggciobogbc/"

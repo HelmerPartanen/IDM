@@ -51,11 +51,11 @@ export function createTray(
   }
 
   tray = new Tray(trayIcon);
-  tray.setToolTip('IDM Clone - Download Manager');
+  tray.setToolTip('Download Manager');
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Show IDM Clone',
+      label: 'Show Download Manager',
       click: () => {
         mainWindow.show();
         mainWindow.focus();

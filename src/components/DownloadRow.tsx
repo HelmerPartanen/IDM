@@ -14,13 +14,13 @@ import {
 
 const fileIcons: Record<string, React.ReactNode> = {
   archive: <Archive size={16} />,
-  app:     <AppWindow size={16} />,
-  doc:     <FileText size={16} />,
-  video:   <Video size={16} />,
-  audio:   <Music size={16} />,
-  image:   <Image size={16} />,
-  disc:    <Disc size={16} />,
-  file:    <File size={16} />,
+  app: <AppWindow size={16} />,
+  doc: <FileText size={16} />,
+  video: <Video size={16} />,
+  audio: <Music size={16} />,
+  image: <Image size={16} />,
+  disc: <Disc size={16} />,
+  file: <File size={16} />,
 };
 
 interface DownloadRowProps {
@@ -34,13 +34,13 @@ export function DownloadRow({ item, style }: DownloadRowProps) {
   const toggleSelected = useDownloadStore(s => s.toggleSelected);
 
   const isSelected = selectedIds.has(item.id);
-  const progress = getProgress(item.downloadedBytes, item.totalSize);
+  const isCompleted = item.status === 'completed';
+  const progress = isCompleted ? 100 : getProgress(item.downloadedBytes, item.totalSize);
   const statusDisplay = getStatusDisplay(item.status);
   const fileType = getFileTypeInfo(item.filename);
 
   const isActive = item.status === 'downloading';
   const isPaused = item.status === 'paused';
-  const isCompleted = item.status === 'completed';
   const isError = item.status === 'error';
 
   return (
@@ -90,11 +90,11 @@ export function DownloadRow({ item, style }: DownloadRowProps) {
           <div className="flex-1 h-[5px] rounded-full bg-surface-4 overflow-hidden relative">
             <div
               className={`h-full rounded-full transition-all duration-500 ease-apple
-                ${isActive   ? 'progress-active' :
+                ${isActive ? 'progress-active' :
                   isCompleted ? 'bg-semantic-success' :
-                  isPaused    ? 'bg-semantic-warning' :
-                  isError     ? 'bg-semantic-error' :
-                  'bg-label-quaternary'
+                    isPaused ? 'bg-semantic-warning' :
+                      isError ? 'bg-semantic-error' :
+                        'bg-label-quaternary'
                 }
               `}
               style={{ width: `${progress}%` }}

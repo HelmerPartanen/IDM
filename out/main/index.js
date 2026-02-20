@@ -2217,7 +2217,7 @@ const store = new Store({
   defaults: {
     settings: {
       ...DEFAULT_SETTINGS,
-      downloadFolder: path.join(electron.app.getPath("downloads"), "IDM Clone")
+      downloadFolder: path.join(electron.app.getPath("downloads"), "Download Manager")
     }
   }
 });
@@ -2318,10 +2318,10 @@ function createTray(mainWindow2, queueManager2) {
     log.info("[Tray] Loaded tray icon successfully");
   }
   tray = new electron.Tray(trayIcon);
-  tray.setToolTip("IDM Clone - Download Manager");
+  tray.setToolTip("Download Manager");
   const contextMenu = electron.Menu.buildFromTemplate([
     {
-      label: "Show IDM Clone",
+      label: "Show Download Manager",
       click: () => {
         mainWindow2.show();
         mainWindow2.focus();
@@ -2455,11 +2455,25 @@ async function runSetup() {
       resourcesDir = path.join(appDir, "resources");
     }
     log.info(`[Setup] Detected resources directory: ${resourcesDir}`);
-    const manifestPath = isDev ? path.join(resourcesDir, "native-host", "com.idm.clone.json") : path.join(resourcesDir, "native-host", "com.idm.clone.json");
-    const hostExePath = isDev ? path.join(resourcesDir, "native-host", "dist", "idm-native-host.exe") : path.join(resourcesDir, "native-host", "idm-native-host.exe");
-    if (fs.existsSync(manifestPath)) {
+    const manifestPath = path.join(resourcesDir, "native-host", "com.idm.clone.json");
+    const possibleHostPaths = [
+      path.join(resourcesDir, "native-host", "idm-native-host.exe"),
+      path.join(resourcesDir, "native-host", "dist", "idm-native-host.exe")
+      // Legacy/Dev fallback
+    ];
+    let hostExePath = "";
+    for (const p of possibleHostPaths) {
+      if (fs.existsSync(p)) {
+        hostExePath = p;
+        break;
+      }
+    }
+    if (!hostExePath) {
+      log.error("[Setup] Native messaging host executable NOT found in any expected location:", possibleHostPaths);
+    } else if (fs.existsSync(manifestPath)) {
       try {
         const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+        manifest.name = "com.idm.clone";
         if (manifest.path !== hostExePath) {
           manifest.path = hostExePath;
           fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
@@ -2538,7 +2552,7 @@ function createWindow() {
       webSecurity: true
     },
     backgroundColor: "#000000",
-    icon: path.join(__dirname, "../../resources/favicon.ico")
+    icon: electron.app.isPackaged ? path.join(process.resourcesPath, "resources/favicon.ico") : path.join(__dirname, "../../resources/favicon.ico")
   });
   mainWindow.on("ready-to-show", () => {
     mainWindow?.show();
@@ -2556,6 +2570,7 @@ function createWindow() {
   });
   if (utils.is.dev && process.env["ELECTRON_RENDERER_URL"]) {
     mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"]);
+    mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
   }

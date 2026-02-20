@@ -9,7 +9,7 @@ const store = new Store<{ settings: AppSettings }>({
   defaults: {
     settings: {
       ...DEFAULT_SETTINGS,
-      downloadFolder: path.join(app.getPath('downloads'), 'IDM Clone')
+      downloadFolder: path.join(app.getPath('downloads'), 'Download Manager')
     }
   }
 });
