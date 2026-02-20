@@ -73,7 +73,9 @@
       "oneClick": false,
       "perMachine": false,
       "allowElevation": true,
-      "include": "resources/installer.nsh"
+      "include": "resources/installer.nsh",
+      "installerHeader": "resources/installerHeader.png",
+      "installerSidebar": "resources/installerSidebar.png"
     }
   }
 }
